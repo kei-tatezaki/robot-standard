@@ -3492,7 +3492,7 @@ function updateSwap(dt) {
   updateCam(dt);
   if (ring) ring.material.opacity = 0.55 + 0.4 * Math.sin(performance.now() / 180);
   const a = swapAnim; if (!a) return;
-  a.t += Math.min(dt, 1 / 30);   // 重い処理の直後の長いコマで、動きが飛ばないように
+  a.t += Math.min(dt, 0.25);   // 重い処理の直後の長いコマ（数秒）で動きが飛ばないように。遅い端末でも長引きすぎないよう 0.25 秒まで
   if (a.intro) {   // はじめの組み上がり
     let done = true;
     for (const f of a.fresh) {
