@@ -157,6 +157,7 @@
   .swapCards.presets { grid-template-columns: repeat(5, 1fr); }
   .swapCards.presets img { height: 96px; }
   .swapCard span.ai { color: var(--warn); }
+  .randomArt { display: grid; place-items: center; height: 96px; border-radius: 7px; background: #2a2e33; font-size: 40px; font-weight: 700; color: var(--muted); }
   .swapResult { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 1.5em; line-height: 1.5; }
   .swapResult b { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } }
@@ -176,7 +177,7 @@
     .editPanel .swapCards { grid-template-columns: repeat(4, 1fr); max-height: 30vh; }
     .swapCards.presets { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
     .swapCards.presets .swapCard { flex: 0 0 30%; scroll-snap-align: start; }
-    .swapCards.presets img { height: 70px; }
+    .swapCards.presets img, .randomArt { height: 70px; }
     .hintText { font-size: 12px; padding: 9px 4px; }
     .swapToast { bottom: auto; top: 92px; font-size: 12px; }
     .rotNote { display: none; }
@@ -3065,12 +3066,14 @@ const ARM_SETS = [   // 肩の先の 六角M の口
   { id: "bossFist", label: "番人の腕（拳）", note: "上腕・前腕・拳", chain: ["BossUpperArm", "BossForearm", "BossFist"] },
   { id: "bossPalm", label: "番人の腕（掌）", note: "上腕・前腕・掌", chain: ["BossUpperArmB", "BossForearmB", "BossPalm"] },
 ];
-const PRESETS = [   // はじめのロボット（ai：見た目に AI 生成のパーツを使っているか。審査対象外の申告のため表示する）
-  { id: "human", label: "人型", note: "自作のパーツだけ", ai: 0, theme: "WHITE" },
-  { id: "wheel", label: "車輪型", note: "自作のパーツだけ", ai: 0, theme: "WHITE" },
-  { id: "golemH", label: "古代ゴーレム", note: "見た目はAI生成", ai: 2, theme: "ANCIENT" },
-  { id: "boss", label: "塔の番人", note: "見た目はAI生成", ai: 2, theme: "ANCIENT" },
-  { id: "quad", label: "四つ足", note: "脚はAI生成", ai: 1, theme: "ANCIENT" },
+// はじめのロボット：用途（体のつくり）が違うものだけを並べる。ゴーレム・番人は人型の見た目違いなので、プリセットにはせず付け替えで出す（本人 11/11）
+// ai：見た目に AI 生成のパーツを使っているか（審査対象外の申告のため表示する）
+const PRESETS = [
+  { id: "mini", label: "基本", note: "コア1つ・いちばん小さい", ai: 0, theme: "WHITE" },
+  { id: "human", label: "人型", note: "二本足で歩く", ai: 0, theme: "WHITE" },
+  { id: "wheel", label: "車輪型", note: "車輪で走る", ai: 0, theme: "WHITE" },
+  { id: "quad", label: "四つ足", note: "胴をつないで脚を増やす（脚はAI生成）", ai: 1, theme: "WHITE" },
+  { id: "random", label: "ランダム", note: "脚・腕・頭・見た目を選ぶ（AI生成も含む）", ai: 1, random: true },
 ];
 let preset = "human";
 const KIND_INFO = {
@@ -3195,7 +3198,7 @@ function initSwap() {
   document.getElementById("hintLook").addEventListener("click", openLook);
   document.getElementById("hintReset").addEventListener("click", () => {
     if (edit || swapAnim) return;
-    startPreset(preset); clunk(0.8); toast("最初の形に戻しました");
+    startPreset(preset, presetSnap); clunk(0.8); toast("最初の形に戻しました");
   });
   document.getElementById("hintPreset").addEventListener("click", openPresets);
   document.getElementById("swapClose").addEventListener("click", closeLook);
@@ -3224,7 +3227,7 @@ function initSwap() {
 function makePresetThumbs() {   // 組み上がったロボットを、そのまま絵にする（presets/*.png を作るときだけ使う。ふだんは画像を読む）
   const out = {};
   for (const p of PRESETS) {
-    if (!RECIPES[p.id]) continue;
+    if (!RECIPES[p.id] || p.random) continue;
     buildRecipe(p.id); if (p.theme) applyTheme(p.theme);
     const bp = buildGroup.parent, vis = buildGroup.visible; thumbScene.add(buildGroup); buildGroup.visible = true;
     buildGroup.traverse(o => { if (o.userData.isMark) o.visible = false; });
@@ -3239,10 +3242,11 @@ function openPresets() {
   if (trayOpen) closeLook();
   const box = document.getElementById("presetCards"); box.innerHTML = "";
   for (const p of PRESETS) {
-    if (!RECIPES[p.id]) continue;
-    const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (p.id === preset ? " now" : "");
+    if (!RECIPES[p.id] && !p.random) continue;
+    const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (p.id === preset && !p.random ? " now" : "");
     b.dataset.id = p.id;
-    b.innerHTML = `<img alt="" src="presets/${p.id}.png"><b>${p.label}</b><span class="${p.ai ? "ai" : ""}">${p.note}</span>`;
+    b.innerHTML = (p.random ? `<span class="randomArt" aria-hidden="true">?</span>` : `<img alt="" src="presets/${p.id}.png">`) +
+      `<b>${p.label}</b><span class="${p.ai ? "ai" : ""}">${p.note}</span>`;
     b.addEventListener("click", () => { startPreset(p.id); closePresets(); });
     box.appendChild(b);
   }
@@ -3254,13 +3258,40 @@ function closePresets() {
   document.getElementById("presetTray").hidden = true;
   document.body.classList.remove("trayOpen"); trayOpen = null; frameSwap();
 }
-function startPreset(id) {
+// ランダム：体のつくり（人型・基本）を選び、脚・腕・頭をそれぞれの口に合うものから選ぶ（左右はそろえる）。世界観も選ぶ
+// 何でも好きにつなぐと横向きの脚や逆さの腕になり「壊れている」と見えるので、替えられる所ごとに選ぶ（Claude 11/11）
+function buildRandom() {
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  buildRecipe(pick(["human", "human", "mini"]));
+  const hip = hipInst();
+  if (hip) { const t = hip.target; removeInst(hip); attachSet(t, pick(LEG_SETS.filter(setReady))); }
+  const arm = pick(ARM_SETS.filter(setReady));
+  for (const sh of insts.filter(i => /Shoulder/.test(i.key))) {
+    const s = sh.sockets.find(x => x.userData.rs.shape === "HEX" && x.userData.rs.size === "M");
+    if (!s) continue;
+    const old = editRootAt(s); if (old) removeInst(old);
+    attachSet(s, arm);
+  }
+  const head = insts.find(i => /Head/.test(i.key) && i.target);
+  if (head) {
+    const t = head.target, want = t.userData.rs;
+    const heads = Object.keys(templates).filter(k => !isOld(k) && catOf(k) === "head" && templates[k].probe.some(x => x.userData.rs.shape === want.shape && x.userData.rs.size === want.size));
+    removeInst(head); attachRaw(t, pick(heads));
+  }
+  applyTheme(pick(Object.keys(THEMES)));
+}
+let presetSnap = null;
+function startPreset(id, snap) {
   preset = id;
   stopAutoMove();
   buildGroup.position.set(0, 0, 0); buildGroup.quaternion.identity(); phys = null;
   controls.target.set(0, 1, 0); camera.position.set(3, 3, 12);
-  buildRecipe(id);
-  const P = PRESETS.find(x => x.id === id); if (P && P.theme) applyTheme(P.theme);
+  const P = PRESETS.find(x => x.id === id);
+  if (snap) loadBuild(snap);   // 「最初の形に戻す」：選んだときの形（ランダムでも同じもの）に戻す
+  else if (P && P.random) buildRandom();
+  else buildRecipe(id);
+  if (P && P.theme && !snap) applyTheme(P.theme);
+  presetSnap = serializeBuild();
   refreshMarks(); commit();
   document.getElementById("hintReset").hidden = true;
   // はじめの2秒：胴から外へ、つながる順にパーツが付いていく（規格でつながる様子を最初に見せる）
