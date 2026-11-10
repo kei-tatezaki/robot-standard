@@ -99,7 +99,9 @@
   body.swapMode .title { font-size: 26px; }
   body.swapMode .title small { font-size: 14px; margin-top: 6px; }
   body.swapMode .status { display: none; }
-  .moreLink { position: fixed; top: 22px; right: 24px; z-index: 5; font-size: 12px; color: var(--muted); text-decoration: none;
+  .moreLinks { position: fixed; top: 22px; right: 24px; z-index: 5; display: flex; gap: 8px; }
+  .hintBtn.ghost { font-weight: 400; color: var(--muted); }
+  .moreLink { font-size: 12px; color: var(--muted); text-decoration: none;
     border: 1px solid var(--panel-edge); border-radius: 999px; padding: 5px 12px; background: rgba(39,43,48,.7); }
   .moreLink:hover { color: var(--ink); border-color: var(--muted); }
   .swapHints { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
@@ -151,7 +153,7 @@
     background: rgba(39,43,48,.96); border: 1px solid var(--panel-edge); border-radius: 12px; padding: 10px 16px; font-size: 13px;
     color: var(--ink); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
   .swapToast.on { opacity: 1; transform: translate(-50%, 0); }
-  body.editing .moreLink { display: none; }
+  body.editing .moreLinks { display: none; }
   .swapResult { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 1.5em; line-height: 1.5; }
   .swapResult b { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } }
@@ -159,7 +161,9 @@
     body.swapMode #view { height: 100vh; height: 100dvh; }
     body.swapMode .title { font-size: 20px; }
     body.swapMode .title small { display: block; font-size: 12px; }
-    .moreLink { top: 14px; right: 12px; font-size: 11px; padding: 4px 10px; max-width: 46vw; white-space: normal; text-align: center; }
+    .moreLinks { top: 14px; right: 12px; gap: 6px; }
+    .moreLink { font-size: 11px; padding: 4px 10px; white-space: nowrap; }
+    .swapHints { flex-wrap: wrap; justify-content: center; width: calc(100vw - 24px); }
     .swapHints { bottom: 16px; gap: 8px; }
     .hintBtn { font-size: 13px; padding: 9px 16px; }
     .swapTray { bottom: 10px; padding: 10px; }
@@ -168,7 +172,7 @@
     .swapCard img { height: 60px; }
     .editPanel .swapCards { grid-template-columns: repeat(4, 1fr); max-height: 30vh; }
     .hintText { font-size: 12px; padding: 9px 4px; }
-    .swapToast { bottom: 76px; font-size: 12px; }
+    .swapToast { bottom: auto; top: 92px; font-size: 12px; }
     .rotNote { display: none; }
   }
 
@@ -3150,8 +3154,10 @@ function initSwap() {
   fitView();
   window.__rsNoWrap = true;   // 部屋の端で出直さない（床はどこまでも続く）
   document.querySelector(".title").innerHTML = "ロボット規格<small>パーツを替えても、そのまま動く。<span class=\"nb\">替えたい所を押してください</span></small>";
-  const more = document.createElement("a"); more.className = "moreLink"; more.href = "?full"; more.textContent = innerWidth <= 760 ? "作る人向け" : "作る人向けの画面（組み立て・テスト部屋）";
-  document.body.appendChild(more);
+  const links = document.createElement("div"); links.className = "moreLinks";
+  links.innerHTML = `<a class="moreLink" href="https://docs.google.com/presentation/d/19mLz_kgfR3lWMdFyHlBK5YBztLL8zdGyVKlxP3l4Jt4/edit" target="_blank" rel="noopener">企画書</a>` +
+    `<a class="moreLink" href="?full">${innerWidth <= 760 ? "作る人向け" : "作る人向けの画面（組み立て・テスト部屋）"}</a>`;
+  document.body.appendChild(links);
   // 見た目のトレイ
   const tray = document.createElement("div"); tray.className = "swapTray"; tray.id = "swapTray"; tray.hidden = true;
   tray.innerHTML = `<div class="swapHead"><div><b>見た目を替える</b><span class="sub">形はそのまま。素材の枠（装甲・骨組み・刃・光）に当てるテクスチャだけを替えます</span></div>
@@ -3169,9 +3175,15 @@ function initSwap() {
     </div><p class="swapResult" id="editResult" aria-live="polite"></p>`;
   document.body.appendChild(ed);
   const hint = document.createElement("div"); hint.className = "swapHints"; hint.id = "swapHints";
-  hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・肩・頭）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>`;
+  hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・肩・頭）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>` +
+    `<button type="button" class="hintBtn ghost" id="hintReset" hidden>最初の形に戻す</button>`;
   document.body.appendChild(hint);
   document.getElementById("hintLook").addEventListener("click", openLook);
+  document.getElementById("hintReset").addEventListener("click", () => {
+    if (edit || swapAnim) return;
+    stopAutoMove(); buildRecipe("human"); refreshMarks(); phys = null; startAutoMove(); commit();
+    document.getElementById("hintReset").hidden = true; clunk(0.8); toast("最初の形に戻しました"); frameSwap();
+  });
   document.getElementById("swapClose").addEventListener("click", closeLook);
   document.getElementById("rotL").addEventListener("click", () => rotateEdit(-1));
   document.getElementById("rotR").addEventListener("click", () => rotateEdit(1));
@@ -3407,12 +3419,30 @@ function confirmEdit() {
   const kind = edit.kind, label = edit.choice ? edit.choice.label : "";
   commit();
   endEdit();
+  clunk(1.25);
+  document.getElementById("hintReset").hidden = false;
   setTimeout(() => {   // 新しい形での歩き方を見せる
     const g = autoMove && autoMove.gp;
     const msg = kind === "legs" && g ? `${label}：脚の長さ ${g.L.toFixed(2)}m → 歩幅 ${g.lam.toFixed(2)}m・1歩 ${(g.T / 2).toFixed(2)}秒。歩き方は脚の長さから式で決めています`
       : kind === "legs" ? `${label}：車輪なので、歩かずに回して進みます` : `${label || "向き"}を反映しました。動き方はそのまま付いてきます`;
     toast(msg);
   }, 80);
+}
+let audioCtx = null;
+function clunk(pitch = 1) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ac = audioCtx, t = ac.currentTime;
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+    const n = ac.createBufferSource(); n.buffer = buf;
+    const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800 * pitch; bp.Q.value = 1.2;
+    const g1 = ac.createGain(); g1.gain.value = 0.18;
+    n.connect(bp).connect(g1).connect(ac.destination); n.start(t);
+    const o = ac.createOscillator(); o.type = "sine"; o.frequency.setValueAtTime(140 * pitch, t); o.frequency.exponentialRampToValueAtTime(60 * pitch, t + 0.12);
+    const g2 = ac.createGain(); g2.gain.setValueAtTime(0.25, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(g2).connect(ac.destination); o.start(t); o.stop(t + 0.18);
+  } catch (err) { /* 音が出せない環境では何もしない */ }
 }
 let toastTimer = 0;
 function toast(msg) {
@@ -3512,6 +3542,7 @@ function updateSwap(dt) {
       const s = f.target; if (!s) continue;
       fxRing(s.getWorldPosition(V3()), 0.5, 0xf3e2c0, 0.4);
     }
+    clunk(1);
     swapAnim = null;
     if (edit) focusOn(resolvePath(edit.path));   // 新しいパーツの大きさに合わせて寄り直す
   }
