@@ -1,0 +1,2345 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ロボット規格ビューア</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #1d2023;
+    --panel: #272b30;
+    --panel-edge: #3a3f46;
+    --ink: #e9ebee;
+    --muted: #9aa1a9;
+    --circle: #33ccff;
+    --square: #ffcc33;
+    --hex: #ff59cc;
+    --warn: #ff8a5c;
+    --ok: #7fd49a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--ground); color: var(--ink);
+    font-family: "BIZ UDPGothic", system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
+  #view { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .title { position: fixed; left: 24px; top: 18px; margin: 0; font-size: 20px; font-weight: 700;
+    letter-spacing: 0.02em; }
+  .title small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+
+  /* 世界観：素材の見本チップ（このページの主役） */
+  .themes { position: fixed; left: 24px; top: 50%; transform: translateY(-50%);
+    display: grid; grid-template-columns: repeat(2, auto); gap: 12px 16px; }
+  .themes .chip { grid-template-columns: 48px auto; gap: 8px; }
+  .themes .chip .swatch { width: 48px; height: 48px; }
+  .themes .chip .desc { display: none; }
+  .chip { display: grid; grid-template-columns: 56px auto; gap: 12px; align-items: center;
+    background: none; border: 0; color: var(--ink); font: inherit; cursor: pointer; padding: 0; text-align: left; }
+  .chip .swatch { width: 56px; height: 56px; border-radius: 10px; overflow: hidden;
+    display: grid; grid-template-rows: 2fr 1fr 1fr; outline: 2px solid transparent; outline-offset: 3px;
+    transition: outline-color .15s; }
+  .chip .swatch span { background-size: 220%; background-position: center; }
+  .chip .glow { position: relative; }
+  .chip .glow::after { content: ""; position: absolute; right: 6px; top: 50%; width: 14px; height: 4px;
+    border-radius: 2px; transform: translateY(-50%); background: var(--g, transparent); box-shadow: 0 0 8px var(--g, transparent); }
+  .chip .name { font-weight: 700; }
+  .chip .desc { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  .chip[aria-pressed="true"] .swatch { outline-color: var(--ink); }
+  .chip:focus-visible .swatch { outline-color: var(--circle); }
+
+  /* 右側の情報 */
+  .side { position: fixed; right: 20px; top: 20px; bottom: 20px; width: 320px; overflow: auto;
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 14px; padding: 18px; }
+  .side h2 { font-size: 15px; margin: 0 0 8px; }
+  .side section + section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--panel-edge); }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+  .tab { font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); background: none;
+    border: 1px solid var(--panel-edge); border-radius: 8px; padding: 8px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: var(--ink); background: #31363c; border-color: var(--muted); }
+  .tab:focus-visible, .btn:focus-visible, .pick:focus-visible { outline: 2px solid var(--circle); outline-offset: 2px; }
+  .anims { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { font: inherit; font-size: 13px; color: var(--ink); background: #31363c; border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn[disabled] { opacity: .45; cursor: default; }
+  .joint { font-size: 13px; padding: 6px 0; }
+  .joint b { display: block; font-size: 13px; }
+  .joint .range { color: var(--muted); }
+  .joint .free.narrow { color: var(--warn); }
+  .joint .free.full { color: var(--ok); }
+  .toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { white-space: nowrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .picks { display: flex; flex-direction: column; gap: 6px; }
+  .pick { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--ink);
+    background: #31363c; border: 1px solid var(--panel-edge); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+  .pick b { display: block; }
+  .pick span { font-size: 12px; color: var(--ok); }
+  .pick.no { cursor: default; color: var(--muted); background: none; }
+  .pick.no span { color: var(--warn); }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; margin: 8px 0 0; }
+  .stats dt { color: var(--muted); }
+  .stats dd { margin: 0; font-weight: 700; }
+  .check { font-size: 13px; margin: 8px 0 0; padding-left: 0; list-style: none; }
+  .check li::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+  .check li.bad::before { content: "！ "; color: var(--warn); }
+  .sockettag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: #1d2023; font-weight: 700; }
+  .status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); font-size: 13px; color: var(--muted);
+    text-align: center; max-width: 60vw; }
+  [hidden] { display: none !important; }
+
+  @media (max-width: 760px) {
+    .title { left: 16px; top: 12px; }
+    /* スマホ：上に3D、下にパネルと世界観（11/10） */
+    #view { bottom: auto; height: 50vh; height: 50dvh; }
+    body.panel-min #view { height: calc(100vh - 205px); height: calc(100dvh - 205px); }
+    .title { font-size: 17px; }
+    .themes { left: 16px; right: 16px; top: auto; bottom: 10px; transform: none; display: flex; flex-direction: row;
+      gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+    .themes .chip { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 2px; flex: 0 0 auto; }
+    .themes .chip .swatch { width: 40px; height: 40px; }
+    .themes .chip .name { font-size: 12px; white-space: nowrap; }
+    .side { left: 12px; right: 12px; width: auto; top: calc(50vh + 6px); top: calc(50dvh + 6px); bottom: 86px;
+      max-height: none; padding: 12px 14px; }
+    body.panel-min .side { top: auto; height: 112px; overflow: hidden; }
+    .tabs { margin-bottom: 12px; }
+    .status { bottom: auto; top: calc(50vh - 52px); top: calc(50dvh - 52px); max-width: 92vw; font-size: 12px; }
+    body.panel-min .status { top: calc(100vh - 256px); top: calc(100dvh - 256px); }
+    .side .panelToggle { display: block; }
+    .title small { display: none; }
+  }
+  .panelToggle { display: none; width: 100%; font: inherit; font-size: 12px; color: var(--muted); background: none;
+    border: 0; padding: 0 0 8px; cursor: pointer; }
+  .panelToggle:focus-visible { outline: 2px solid var(--circle); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .chip .swatch { transition: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="view" aria-label="ロボットの3D表示。ドラッグで回転、ホイールで拡大縮小"></div>
+<h1 class="title">ロボット規格ビューア<small>形はそのまま、世界観だけを切り替える</small></h1>
+
+<nav class="themes" aria-label="世界観"></nav>
+
+<aside class="side">
+  <button class="panelToggle" id="panelToggle" type="button" aria-expanded="true">▾ パネルをたたむ</button>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabView" aria-selected="true" type="button">見本を見る</button>
+    <button class="tab" role="tab" id="tabBuild" aria-selected="false" type="button">自分で組み立てる</button>
+    <button class="tab" role="tab" id="tabTest" aria-selected="false" type="button">テスト部屋</button>
+  </div>
+
+  <div id="paneView">
+    <section>
+      <h2>動作</h2>
+      <div class="anims" id="anims"></div>
+      <p class="note">パーツに入っている動作です。つないだパーツの動作は、そのままロボットについてきます。続けて押すと、部位ごとの動作が重なって同時に動きます。</p>
+    </section>
+    <section>
+      <h2>接続口</h2>
+      <label class="toggle"><input type="checkbox" id="showSockets"> 接続口を表示する</label>
+      <div class="legend"><span><i style="background:var(--circle)"></i>丸</span><span><i style="background:var(--square)"></i>四角</span><span><i style="background:var(--hex)"></i>六角</span></div>
+    </section>
+    <section>
+      <h2>関節</h2>
+      <div id="joints"></div>
+    </section>
+  </div>
+
+  <div id="paneBuild" hidden>
+    <section id="buildStart">
+      <h2>はじめに置くコア</h2>
+      <div class="picks" id="corePicks"></div>
+    </section>
+    <section id="buildPick" hidden>
+      <h2>この接続口につなぐ</h2>
+      <p class="note" id="pickTarget"></p>
+      <div class="picks" id="partPicks"></div>
+    </section>
+    <section id="buildSel" hidden>
+      <h2 id="selName">選んだパーツ</h2>
+      <div class="anims">
+        <button class="btn" id="twistBack" type="button">逆にひねる</button>
+        <button class="btn" id="twist" type="button">ひねる</button>
+        <button class="btn" id="remove" type="button">外す</button>
+      </div>
+      <p class="note" id="twistNote"></p>
+      <div class="anims" id="selAnims" style="margin-top:10px"></div>
+    </section>
+    <section>
+      <h2>遊び方</h2>
+      <p class="note">光っている接続口をクリックすると、つなげるパーツが出ます。形と大きさが両方そろった接続口だけがつながります。パーツをクリックすると、ひねる・外す・動作の再生ができます。</p>
+      <div class="legend"><span><i style="background:var(--circle)"></i>丸（回転自由）</span><span><i style="background:var(--square)"></i>四角（90度）</span><span><i style="background:var(--hex)"></i>六角（60度）</span></div>
+      <button class="btn" id="reset" type="button" style="margin-top:12px">最初からやり直す</button>
+    </section>
+    <section>
+      <h2>見本の組み合わせ</h2>
+      <p class="note">同じパーツの組み合わせを変えるだけで、別のロボットになります。押すと自動で組み立てます。</p>
+      <div class="anims" id="recipes" style="margin-top:8px">
+        <button class="btn" type="button" data-recipe="human">人型</button>
+        <button class="btn" type="button" data-recipe="wheel">車輪型</button>
+        <button class="btn" type="button" data-recipe="mini">小型（コア1つ）</button>
+        <button class="btn" type="button" data-recipe="mining">採掘ロボ</button>
+        <button class="btn" type="button" data-recipe="golem">遺跡を掘るゴーレム</button>
+        <button class="btn" type="button" data-recipe="golemH">古代ゴーレム</button>
+        <button class="btn" type="button" data-recipe="boss">塔の番人（ボス）</button>
+        <button class="btn" type="button" data-recipe="quad">四つ足</button>
+        <button class="btn" type="button" data-recipe="six">六本脚</button>
+        <button class="btn" type="button" data-recipe="octo">八本脚</button>
+      </div>
+      <div class="anims" id="golemCtl" style="margin-top:8px" hidden>
+        <button class="btn" id="walkToggle" type="button" aria-pressed="false">歩く</button>
+        <button class="btn" id="smashBtn" type="button">拳をたたきつける</button>
+      </div>
+      <div class="anims" id="bossCtl" style="margin-top:8px" hidden>
+        <button class="btn" id="bossWalk" type="button" aria-pressed="false">歩く</button>
+        <button class="btn" id="bossBlast" type="button">手のひらからエネルギー弾</button>
+        <button class="btn" id="bossSmash" type="button">拳をたたきつける</button>
+      </div>
+      <div class="anims" id="miningCtl" style="margin-top:8px" hidden>
+        <button class="btn" id="runToggle" type="button" aria-pressed="false">キャタピラを回す</button>
+        <button class="btn" id="toolSwap" type="button">剣に持ち替える</button>
+        <button class="btn" id="digToggle" type="button" aria-pressed="false">掘る</button>
+        <button class="btn" id="readyBtn" type="button">振りかざす</button>
+      </div>
+    </section>
+  </div>
+  <div id="paneTest" hidden>
+    <section>
+      <h2>テスト部屋</h2>
+      <p class="note">組み立てたロボット（またはランダムに組んだロボット）を部屋に入れて動かします。動きはパーツの名前を見ずに、<b>どこにつながっているか</b>と<b>関節の範囲</b>だけから作ります。だから、どんな組み合わせでも同じように動きます。</p>
+      <div class="anims" style="margin-top:10px">
+        <button class="btn" id="testRandom" type="button">ランダムに組む</button>
+        <button class="btn" id="testMove" type="button" aria-pressed="false">動作テスト</button>
+        <button class="btn" id="testAuto" type="button" aria-pressed="false">おまかせ連続テスト</button>
+      </div>
+      <label class="toggle" style="margin-top:10px"><input type="checkbox" id="testSym" checked> 左右をそろえる</label>
+      <label class="toggle"><input type="checkbox" id="testWalk" checked> 部屋の中を進む</label>
+      <label class="toggle"><input type="checkbox" id="testGravity" checked> 重力</label>
+      <label class="toggle">歩く速さ <select id="testSpeed"><option value="0.05">そろそろ</option><option value="0.08">ゆっくり歩き</option><option value="0.15" selected>ふつう</option><option value="0.3">小走り</option><option value="0.5">走る</option></select></label>
+      <div class="toggle">手付けの動き <select id="testClip"><option value="">（読み込み中）</option></select> <button class="btn" type="button" id="testClipPlay">再生</button> <label><input type="checkbox" id="testFx" checked> 効果</label></div>
+      <label class="toggle">歩き方 <select id="testGait"><option value="auto" selected>自動で選ぶ</option><option value="trot">対角（トロット）</option><option value="pace">同じ側（ペース）</option><option value="wave">後ろから順（ウェーブ）</option></select></label>
+    </section>
+    <section>
+      <h2>結果</h2>
+      <dl class="stats" id="testStats"><dt>パーツ</dt><dd>—</dd></dl>
+      <ul class="check" id="testChecks"></ul>
+    </section>
+    <section>
+      <h2>動きの決まり</h2>
+      <p class="note">コアの下の枝 → 脚（関節があれば歩く、車輪・キャタピラなら回す）。左右の枝 → 腕（脚と逆に振る。脚がなければ作業の動き）。上・前後の枝 → 頭や道具（ゆっくり上げ下げ）。大きく回せる側を「前」とみなし、値は必ず関節の範囲の内側に収めます。</p>
+    </section>
+  </div>
+</aside>
+<p class="status" id="status">読み込み中…</p>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// アドオンと同じ世界観の表（枠ごとの 色・粗さ・金属・光）
+const THEMES = {
+  WHITE: { name: "白", desc: "新品の白い装甲・青い光",
+    RS_Armor: { tint: [0.88, 0.89, 0.91], rough: 0.55, metal: 0.0 },
+    RS_Frame: { tint: [0.22, 0.23, 0.25], rough: 0.5, metal: 0.8 },
+    RS_Blade: { tint: [0.8, 0.82, 0.85], rough: 0.2, metal: 1.0 },
+    RS_Glow: { tint: [0.1, 0.45, 1.0], rough: 0.3, metal: 0.0, emit: [0.1, 0.5, 1.0], power: 2 } },
+  BLACK: { name: "黒", desc: "黒い装甲・赤い光",
+    RS_Armor: { tint: [0.05, 0.05, 0.055], rough: 0.6, metal: 0.1 },
+    RS_Frame: { tint: [0.16, 0.18, 0.21], rough: 0.4, metal: 0.9 },
+    RS_Blade: { tint: [0.12, 0.12, 0.13], rough: 0.25, metal: 1.0 },
+    RS_Glow: { tint: [1.0, 0.06, 0.03], rough: 0.3, metal: 0.0, emit: [1.0, 0.05, 0.02], power: 0.8 } },
+  RUST: { name: "錆", desc: "錆びた廃品・オレンジの光",
+    RS_Armor: { tint: [0.42, 0.22, 0.12], rough: 0.9, metal: 0.3 },
+    RS_Frame: { tint: [0.18, 0.16, 0.14], rough: 0.85, metal: 0.6 },
+    RS_Blade: { tint: [0.48, 0.46, 0.42], rough: 0.6, metal: 0.8 },
+    RS_Glow: { tint: [1.0, 0.45, 0.05], rough: 0.3, metal: 0.0, emit: [1.0, 0.4, 0.05], power: 1.6 } },
+  TOY: { name: "おもちゃ", desc: "プラスチック・光らない",
+    RS_Armor: { tint: [1.0, 0.78, 0.08], rough: 0.25, metal: 0.0 },
+    RS_Frame: { tint: [0.08, 0.28, 0.85], rough: 0.25, metal: 0.0 },
+    RS_Blade: { tint: [0.85, 0.08, 0.06], rough: 0.25, metal: 0.0 },
+    RS_Glow: { tint: [0.95, 0.95, 0.95], rough: 0.25, metal: 0.0 } },
+  ANCIENT: { name: "古代", desc: "苔むした石・青銅・魔力の光",
+    RS_Armor: { tint: [0.55, 0.52, 0.44], rough: 0.92, metal: 0.0 },
+    RS_Frame: { tint: [0.42, 0.33, 0.2], rough: 0.5, metal: 0.75 },
+    RS_Blade: { tint: [0.06, 0.05, 0.08], rough: 0.12, metal: 0.0 },
+    RS_Glow: { tint: [0.15, 0.9, 0.8], rough: 0.3, metal: 0.0, emit: [0.1, 0.9, 0.75], power: 1.6 } },
+  // ここから 11/09 追加（tools/gen_themes.py で自作。凹凸の地図 _nrm つき）
+  GOLD: { name: "王宮", desc: "白い大理石・金の飾り・青い宝石",
+    RS_Armor: { tint: [0.92, 0.9, 0.86], rough: 0.2, metal: 0.0, nrm: 0.6 },
+    RS_Frame: { tint: [0.9, 0.68, 0.25], rough: 0.25, metal: 1.0, nrm: 0.8 },
+    RS_Blade: { tint: [0.08, 0.2, 0.8], rough: 0.05, metal: 0.0, nrm: 0.5 },
+    RS_Glow: { tint: [1.0, 0.8, 0.35], rough: 0.3, metal: 0.0, emit: [1.0, 0.75, 0.3], power: 1.8 } },
+  ICE: { name: "氷", desc: "ひび割れた氷・雪をかぶった岩・水晶",
+    RS_Armor: { tint: [0.7, 0.85, 0.95], rough: 0.1, metal: 0.0, nrm: 0.8 },
+    RS_Frame: { tint: [0.4, 0.45, 0.5], rough: 0.7, metal: 0.0, nrm: 0.8 },
+    RS_Blade: { tint: [0.85, 0.95, 1.0], rough: 0.03, metal: 0.0, nrm: 0.4 },
+    RS_Glow: { tint: [0.7, 0.9, 1.0], rough: 0.3, metal: 0.0, emit: [0.6, 0.85, 1.0], power: 1.6 } },
+  LAVA: { name: "溶岩", desc: "黒い岩の割れ目から溶岩が光る",
+    RS_Armor: { tint: [0.08, 0.07, 0.06], rough: 0.85, metal: 0.0, nrm: 1.0, emitTex: true, power: 2.2 },
+    RS_Frame: { tint: [0.3, 0.17, 0.09], rough: 0.6, metal: 0.7, nrm: 0.8 },
+    RS_Blade: { tint: [0.04, 0.03, 0.04], rough: 0.08, metal: 0.0, nrm: 0.4 },
+    RS_Glow: { tint: [1.0, 0.35, 0.03], rough: 0.3, metal: 0.0, emit: [1.0, 0.3, 0.02], power: 2.5 } },
+  WOOD: { name: "からくり", desc: "漆塗りの木・真鍮の金具・ちょうちんの光",
+    RS_Armor: { tint: [0.45, 0.17, 0.08], rough: 0.35, metal: 0.0, nrm: 0.8 },
+    RS_Frame: { tint: [0.75, 0.55, 0.22], rough: 0.3, metal: 1.0, nrm: 0.8 },
+    RS_Blade: { tint: [0.75, 0.76, 0.78], rough: 0.15, metal: 1.0, nrm: 0.3 },
+    RS_Glow: { tint: [1.0, 0.7, 0.35], rough: 0.3, metal: 0.0, emit: [1.0, 0.6, 0.25], power: 1.3 } },
+  MILITARY: { name: "軍用", desc: "迷彩の装甲・ガンメタル・緑の表示灯",
+    RS_Armor: { tint: [0.3, 0.31, 0.2], rough: 0.8, metal: 0.0, nrm: 1.0 },
+    RS_Frame: { tint: [0.17, 0.17, 0.17], rough: 0.5, metal: 0.8, nrm: 0.6 },
+    RS_Blade: { tint: [0.45, 0.45, 0.45], rough: 0.35, metal: 1.0, nrm: 0.4 },
+    RS_Glow: { tint: [0.3, 1.0, 0.2], rough: 0.3, metal: 0.0, emit: [0.25, 1.0, 0.15], power: 1.6 } },
+};
+const SLOTS = ["RS_Armor", "RS_Frame", "RS_Blade", "RS_Glow"];
+const SHAPES = ["CIRCLE", "SQUARE", "HEX"], SIZE_KEYS = ["S", "M", "L"], SIZES = { S: 0.2, M: 0.35, L: 0.5 };
+const SHAPE_LABEL = { CIRCLE: "丸", SQUARE: "四角", HEX: "六角" };
+const SHAPE_STEP = { CIRCLE: 15, SQUARE: 90, HEX: 60 };  // 丸は自由に回るが、ボタンでは15度ずつ
+const SHAPE_COLOR = { CIRCLE: 0x33ccff, SQUARE: 0xffcc33, HEX: 0xff59cc };
+const SHAPE_CSS = { CIRCLE: "var(--circle)", SQUARE: "var(--square)", HEX: "var(--hex)" };
+const tex = (theme, slot) => `textures/${theme.toLowerCase()}_${slot.slice(3).toLowerCase()}.jpg`;
+const shownName = n => n.replace(/\.?\d{3}$/, "");
+
+// --- 3D の準備 ---
+const view = document.getElementById("view");
+const VIEW_HINT = matchMedia("(pointer: coarse)").matches ? "ドラッグで回転、ピンチで拡大縮小" : "ドラッグで回転、ホイールで拡大縮小";
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(view.clientWidth, view.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;  // 光の色相を保つ
+renderer.toneMappingExposure = 1.3;
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1d2023);
+const camera = new THREE.PerspectiveCamera(35, view.clientWidth / view.clientHeight, 0.05, 100);
+camera.position.set(4.2, 2.0, 7.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.95, 0);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2622, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(3, 5, 4); scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fb6ff, 1.6); rim.position.set(-4, 3, -3); scene.add(rim);
+const grid = new THREE.GridHelper(10, 20, 0x3a3f46, 0x2c3035); grid.position.y = -1.6; scene.add(grid);
+
+// 世界観ごとのマテリアル（枠の名前で当てはめる。見本も組み立ても同じ4つを共有）
+const loader = new THREE.TextureLoader();
+const texCache = {};
+function getTex(url, data = false) {
+  if (!texCache[url]) {
+    const t = loader.load(url);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = data ? THREE.NoColorSpace : THREE.SRGBColorSpace;  // 凹凸の地図は色ではない
+    t.flipY = false;
+    texCache[url] = t;
+  }
+  return texCache[url];
+}
+const slotMats = {};
+for (const s of SLOTS) slotMats[s] = new THREE.MeshStandardMaterial();
+function applyTheme(id) {
+  const th = THEMES[id];
+  for (const s of SLOTS) {
+    const d = th[s], m = slotMats[s];
+    m.map = s === "RS_Glow" ? null : getTex(tex(id, s));
+    m.color.setRGB(...(m.map ? [1, 1, 1] : d.tint), THREE.SRGBColorSpace);
+    m.roughness = d.rough; m.metalness = d.metal;
+    m.emissive.setRGB(...(d.emit || (d.emitTex ? [1, 1, 1] : [0, 0, 0]))); m.emissiveIntensity = d.power || 0;
+    // 凹凸（_nrm）と光る模様（_emit）は、ある世界観だけ
+    m.normalMap = d.nrm && m.map ? getTex(tex(id, s).replace(".jpg", "_nrm.jpg"), true) : null;
+    if (m.normalMap) m.normalScale.set(d.nrm, d.nrm);
+    m.emissiveMap = d.emitTex ? getTex(tex(id, s).replace(".jpg", "_emit.jpg")) : null;
+    m.needsUpdate = true;
+  }
+  document.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === id)));
+}
+const nav = document.querySelector(".themes");
+for (const [id, th] of Object.entries(THEMES)) {
+  const b = document.createElement("button");
+  b.className = "chip"; b.dataset.theme = id; b.type = "button"; b.title = th.desc;
+  const glow = th.RS_Glow.emit ? `rgb(${th.RS_Glow.emit.map(v => Math.round(v * 255)).join(",")})` : "transparent";
+  b.innerHTML = `<span class="swatch">
+      <span style="background-image:url(${tex(id, "RS_Armor")})"></span>
+      <span class="glow" style="--g:${glow};background-image:url(${tex(id, "RS_Frame")})"></span>
+      <span style="background-image:url(${tex(id, "RS_Blade")})"></span>
+    </span><span class="name">${th.name}<span class="desc">${th.desc}</span></span>`;
+  b.addEventListener("click", () => applyTheme(id));
+  nav.appendChild(b);
+}
+applyTheme("WHITE");
+
+// 接続口の印（形ごとの色）。接続口の外向き（Blender の Z）は glTF では各ノードの Y
+function socketInfo(o) {
+  const sk = o.userData && o.userData.rs_socket;
+  if (!sk || !sk.is_socket) return null;
+  return { shape: SHAPES[sk.shape || 0], size: SIZE_KEYS[sk.size ?? 1] };
+}
+const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+const _hitGeos = {};
+const hitGeo = r => (_hitGeos[r] ||= new THREE.SphereGeometry(r, 10, 8));
+function makeMark(info) {
+  const seg = info.shape === "CIRCLE" ? 32 : info.shape === "SQUARE" ? 4 : 6;
+  const r = info.shape === "SQUARE" ? SIZES[info.size] / 2 * Math.SQRT2 : SIZES[info.size] / 2;
+  const g = new THREE.CircleGeometry(r, seg, info.shape === "SQUARE" ? Math.PI / 4 : 0);
+  const mk = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: SHAPE_COLOR[info.shape], side: THREE.DoubleSide,
+    transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  mk.rotation.x = -Math.PI / 2; mk.position.y = 0.006;
+  return mk;
+}
+function useSlotMats(root) {
+  root.traverse(o => {
+    if (o.isMesh && !o.userData.isMark) {
+      const base = (o.material.name || "").split(".")[0];
+      if (slotMats[base]) o.material = slotMats[base];
+    }
+  });
+}
+
+const status = document.getElementById("status");
+const clock = new THREE.Clock();
+const mixers = new Set();
+const gltfLoader = new GLTFLoader();
+const loadGLB = url => new Promise((ok, ng) => gltfLoader.load(url, ok, undefined, ng));
+
+// ============ 見本を見る ============
+const viewGroup = new THREE.Group(); scene.add(viewGroup);
+const viewMarks = [];
+let viewMixer = null;
+loadGLB("robot.glb").then(gltf => {
+  const robot = gltf.scene;
+  useSlotMats(robot);
+  robot.traverse(o => {
+    const info = socketInfo(o);
+    if (info) { const mk = makeMark(info); mk.userData.isMark = true; mk.visible = false; o.add(mk); viewMarks.push(mk); }
+  });
+  viewGroup.add(robot);
+  fitGround();
+  viewMixer = new THREE.AnimationMixer(robot); mixers.add(viewMixer);
+  const box = document.getElementById("anims");
+  for (const clip of gltf.animations) {
+    const b = document.createElement("button");
+    b.className = "btn"; b.type = "button"; b.textContent = clip.name;
+    b.addEventListener("click", () => {
+      // 止めずに重ねる：腕を振りながら脚でける、のように部位ごとの動作を同時に動かせる
+      const a = viewMixer.clipAction(clip);
+      a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.play();
+    });
+    box.appendChild(b);
+  }
+  const rest = document.createElement("button");
+  rest.className = "btn"; rest.type = "button"; rest.textContent = "基本姿勢に戻す";
+  rest.addEventListener("click", () => viewMixer.stopAllAction());
+  box.appendChild(rest);
+  const jl = document.getElementById("joints");
+  robot.traverse(o => {
+    const u = o.userData;
+    if (!u || !u.rs_joint_type) return;
+    const unit = u.rs_joint_type === "HINGE" ? "度" : "m";
+    const kind = u.rs_joint_type === "HINGE" ? "回転" : "スライド";
+    const div = document.createElement("div"); div.className = "joint";
+    let free = "";
+    if (u.rs_joint_free_min !== undefined) {
+      const narrow = u.rs_joint_free_min > u.rs_joint_min + 1e-6 || u.rs_joint_free_max < u.rs_joint_max - 1e-6;
+      free = `<span class="free ${narrow ? "narrow" : "full"}">ぶつからない範囲 ${u.rs_joint_free_min}〜${u.rs_joint_free_max}${unit}${narrow ? `（${u.rs_joint_hit}に当たる）` : ""}</span>`;
+    }
+    div.innerHTML = `<b>${shownName(o.name)}</b><span class="range">${kind}・${u.rs_joint_axis}軸・設計 ${u.rs_joint_min}〜${u.rs_joint_max}${unit}</span><br>${free}`;
+    jl.appendChild(div);
+  });
+  status.textContent = VIEW_HINT;
+}).catch(err => {
+  status.textContent = "robot.glb を読み込めませんでした。このページはWebサーバー経由で開いてください。";
+  console.error(err);
+});
+document.getElementById("showSockets").addEventListener("change", e => {
+  for (const mk of viewMarks) mk.visible = e.target.checked;
+});
+
+// ============ 自分で組み立てる ============
+const buildGroup = new THREE.Group(); buildGroup.visible = false; scene.add(buildGroup);
+const templates = {};       // key → { label, kind, gltf }
+const insts = [];           // 置いたパーツ
+let picked = null;          // 選んだ空きの接続口
+let selected = null;        // 選んだパーツ
+const FLIP = new THREE.Matrix4().makeRotationX(Math.PI);  // 向かい合わせ（外向きの Y を反対に）
+
+function socketsOf(root) {
+  const out = [];
+  root.traverse(o => { if (socketInfo(o)) out.push(o); });
+  return out;
+}
+function instantiate(key) {
+  const t = templates[key];
+  const holder = t.gltf.scene.clone(true);
+  const root = holder.children[0];
+  holder.remove(root);
+  useSlotMats(root);
+  root.position.set(0, 0, 0); root.quaternion.identity(); root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const inst = { key, label: t.label, root, sockets: [], roll: 0, own: null, target: null, mixer: null, clips: t.gltf.animations };
+  const depth = o => { let d = 0; for (let p = o; p && p !== root; p = p.parent) d++; return d; };
+  for (const s of socketsOf(root).sort((a, b) => depth(a) - depth(b))) {
+    const info = socketInfo(s);
+    const rel = new THREE.Matrix4().multiplyMatrices(inv, s.matrixWorld);
+    const mk = makeMark(info); mk.userData.isMark = true; mk.userData.socket = s; s.add(mk);
+    // クリックの当たり判定：印は平らで横からだと押しにくいので、見えない球で受ける
+    const hit = new THREE.Mesh(hitGeo(SIZES[info.size] * 0.6), hitMat);
+    hit.userData.isMark = true; hit.userData.socket = s; mk.add(hit);
+    s.userData.rs = { ...info, rel, inst, partner: null, mark: mk, hit };
+    inst.sockets.push(s);
+  }
+  root.traverse(o => { o.userData.inst = inst; });
+  // 履帯（rs_track）：板を次の板へ送るモーフ「Move」と、回るだけの車輪（rs_wheel_r）
+  inst.tracks = []; inst.wheels = [];
+  root.traverse(o => {
+    if (!o.userData.rs_track) return;
+    if (o.userData.rs_wheel_r) inst.wheels.push(o);
+    else o.traverse(m => { if (m.isMesh && m.morphTargetDictionary && "Move" in m.morphTargetDictionary) inst.tracks.push(m); });
+  });
+  inst.clips = inst.clips.filter(c => !(inst.tracks.length && /_Move$/.test(c.name)));  // くり返しの動きはボタンで回す
+  inst.runT = 0;
+  if (inst.clips.length) { inst.mixer = new THREE.AnimationMixer(root); mixers.add(inst.mixer); }
+  insts.push(inst);
+  return inst;
+}
+function placeOn(inst) {
+  // 部品の根元 = つなぎ先の接続口 × ひねり × 向かい合わせ × 自分の接続口までの逆
+  const m = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(inst.roll))
+    .multiply(FLIP).multiply(new THREE.Matrix4().copy(inst.own.userData.rs.rel).invert());
+  m.decompose(inst.root.position, inst.root.quaternion, inst.root.scale);
+}
+// 決まり：ロボットの正面は「前」（Blender の −Y、glTF/three では +Z）。パーツも「上 = +Y・前 = +Z」で作る。
+// つないだ直後のひねり：コアから見て、パーツの「上」をなるべく上へ、次に「前」をなるべく前へ向ける。
+// 前に倒れて付くパーツは前が下、後ろに倒れて付くパーツは前が上、真下向きは左右に回して前のまま（Blender と同じ）
+const UP = new THREE.Vector3(0, 1, 0), FRONT = new THREE.Vector3(0, 0, 1);
+function rootInstOf(inst) {
+  let i = inst;
+  while (i.target && i.target.userData.rs && i.target.userData.rs.inst) i = i.target.userData.rs.inst;
+  return i;
+}
+function wantedFront(z) {
+  const q = new THREE.Quaternion();
+  if (z.dot(UP) < -0.999) q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+  else q.setFromUnitVectors(UP, z);
+  return FRONT.clone().applyQuaternion(q);
+}
+// 手：手のひらは「横向き・体の内側」、親指は前（Blender の HAND_AXES と同じ。glTF の向きに直してある）
+const HAND_AXES = {
+  BossPalm: [[0, 0, -1], [1, 0, 0]],
+  BossFist: [[0, 0, 1], null],
+  GolemFist: [[0, 0, -1], null],
+};
+function faceScore(inst, coreRoot, mirrored = false) {
+  const q = new THREE.Quaternion(), p = new THREE.Vector3();
+  inst.root.updateWorldMatrix(true, false);
+  const coreQinv = coreRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
+  inst.root.getWorldQuaternion(q); q.premultiply(coreQinv);
+  const z = UP.clone().applyQuaternion(q);
+  const up = Math.round(z.dot(UP) * 1000) * 10;
+  const ha = HAND_AXES[inst.key];
+  if (ha) {
+    coreRoot.worldToLocal(inst.root.getWorldPosition(p));
+    if (Math.abs(p.x) > 1e-3) {
+      const palm = new THREE.Vector3(...ha[0]), thumb = ha[1] ? new THREE.Vector3(...ha[1]) : null;
+      if (mirrored) { palm.z *= -1; if (thumb) thumb.z *= -1; }
+      const inward = new THREE.Vector3(p.x > 0 ? -1 : 1, 0, 0);
+      let sc = palm.applyQuaternion(q).dot(inward) * 2;
+      if (thumb) sc += thumb.applyQuaternion(q).dot(FRONT);
+      return { score: up + sc, back: false, hand: true };
+    }
+  }
+  const f = FRONT.clone().applyQuaternion(q);
+  return { score: up + f.dot(wantedFront(z)), back: f.dot(wantedFront(z)) < -0.5 };
+}
+// 横に付くパーツ（肩など）は、立てたままだと片側で後ろ向きになる。そのときは形を前後の鏡にする
+function setMirror(inst, flag) {
+  if (!!inst.mirrored === !!flag) return;
+  inst.root.traverse(o => {
+    if (!o.isMesh || o.userData.isMark || socketInfo(o) || o.userData.inst !== inst) return;
+    if (!o.userData.geoOrig) {
+      const g = o.geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().makeScale(1, 1, -1));
+      if (g.index) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } g.index.needsUpdate = true; }
+      o.userData.geoOrig = o.geometry; o.userData.geoMirror = g;
+    }
+    o.geometry = flag ? o.userData.geoMirror : o.userData.geoOrig;
+  });
+  inst.mirrored = !!flag;
+}
+function autoRoll(inst) {
+  const step = SHAPE_STEP[inst.own.userData.rs.shape];
+  const core = rootInstOf(inst).root;
+  core.updateWorldMatrix(true, false);
+  const ha = HAND_AXES[inst.key];
+  const mirrors = ha && ha[1] ? [false, true] : [false];
+  let best = 0, bestScore = -Infinity, bestBack = false;
+  const q = new THREE.Quaternion(), v = new THREE.Vector3();
+  for (let r = 0; r < 360; r += step) {
+    inst.roll = r; placeOn(inst);
+    for (const mi of mirrors) {
+      const s = faceScore(inst, core, mi);
+      if (s.score > bestScore + 1e-6) { bestScore = s.score; best = r; bestBack = s.hand ? mi : s.back; }
+    }
+  }
+  setMirror(inst, bestBack);
+  inst.roll = best; inst.rest = best; placeOn(inst);
+  // 振り幅が決まっているパーツ（肩など）は、どちら回りが「前」かを調べておく
+  inst.swing = inst.root.userData.rs_swing || null;
+  inst.fwd = 1;
+  if (inst.swing) {
+    inst.roll = best + step; placeOn(inst); inst.root.updateWorldMatrix(true, false);
+    inst.root.getWorldQuaternion(q);
+    inst.fwd = v.set(0, -1, 0).applyQuaternion(q).dot(FRONT) >= 0 ? 1 : -1;
+    inst.roll = best; placeOn(inst);
+  }
+  return bestScore;
+}
+// 基本の向きからのひねり角（-180〜180、振り幅のあるパーツは「前」がプラス）
+function twistAngle(inst) {
+  let a = ((inst.roll - inst.rest) % 360 + 540) % 360 - 180;
+  a *= inst.fwd;
+  return a <= -180 + 1e-6 ? 180 : a;  // 真後ろは +180 として扱う
+}
+function twistBy(inst, dir) {
+  const step = SHAPE_STEP[inst.own.userData.rs.shape];
+  if (inst.swing) {
+    const next = twistAngle(inst) + dir * step;
+    if (next < inst.swing[0] - 1e-6 || next > inst.swing[1] + 1e-6) {
+      status.textContent = `${inst.label}はここまでしか回りません（前に${inst.swing[1]}度、後ろに${-inst.swing[0]}度まで）`;
+      return;
+    }
+    inst.roll = inst.rest + next * inst.fwd;
+  } else {
+    inst.roll = inst.roll + dir * step;
+  }
+  inst.roll = ((inst.roll % 360) + 360) % 360;
+  placeOn(inst); showPanel();
+}
+const clipLabel = n => n.includes("_") ? n.slice(n.indexOf("_") + 1) : n;
+function checkLink(target, inst) {
+  // つなげるか。 { socket, msg } 。socket が null ならつなげない
+  const want = target.userData.rs;
+  if (want.partner) return { socket: null, msg: "この接続口は使用中です" };
+  const free = inst.sockets.filter(s => !s.userData.rs.partner);
+  const hit = free.find(s => s.userData.rs.shape === want.shape && s.userData.rs.size === want.size);
+  if (hit) return { socket: hit, msg: `つなげます（${SHAPE_LABEL[want.shape]}${want.size}）` };
+  const have = [...new Set(free.map(s => SHAPE_LABEL[s.userData.rs.shape] + s.userData.rs.size))].join("・");
+  const sameShape = free.some(s => s.userData.rs.shape === want.shape);
+  return { socket: null, msg: (sameShape ? "大きさが違います" : "形が違います") + `（このパーツは ${have}）` };
+}
+function refreshMarks() {
+  for (const inst of insts) for (const s of inst.sockets) {
+    const rs = s.userData.rs;
+    rs.mark.visible = !rs.partner;
+    rs.mark.scale.setScalar(s === picked ? 1.25 : 1);
+    rs.mark.material.opacity = s === picked ? 1 : 0.8;
+  }
+}
+// 組み立て中は、床をロボットの一番下に合わせる
+const _box = new THREE.Box3();
+// 床を一番下に、カメラの注目点を高さの真ん中に合わせる（カメラは同じだけ平行移動）
+function fitGround() {
+  const g = buildGroup.visible ? buildGroup : viewGroup;
+  g.updateMatrixWorld(true);
+  _box.setFromObject(g);
+  if (_box.isEmpty()) { grid.position.y = -0.5; return; }
+  if (testMode && phys) return;   // テスト部屋：床は固定（ロボットは重力で動く）
+  grid.position.y = _box.min.y - 0.02;
+  room.position.y = grid.position.y;
+  const c = _box.getCenter(new THREE.Vector3()), d0 = c.sub(controls.target);
+  controls.target.add(d0); camera.position.add(d0);  // 横に長いロボ（アーム付き）も真ん中に
+  // 全体が入るように、遠すぎ・近すぎだけ直す
+  const h = Math.max(_box.max.y - _box.min.y, (_box.max.x - _box.min.x) * 0.6, (_box.max.z - _box.min.z) * 0.6);
+  const want = Math.max(6, h * 2.1);
+  const off = camera.position.clone().sub(controls.target), d = off.length();
+  if (d < want * 0.95 || d > want * 1.6) camera.position.copy(controls.target).add(off.setLength(want));
+}
+function showPanel() {
+  document.getElementById("buildStart").hidden = insts.length > 0;
+  const pick = document.getElementById("buildPick");
+  pick.hidden = !picked;
+  if (!picked) document.getElementById("partPicks").innerHTML = "";
+  if (picked) {
+    const rs = picked.userData.rs;
+    document.getElementById("pickTarget").innerHTML =
+      `<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span>（${picked.userData.rs.inst.label}）`;
+    const box = document.getElementById("partPicks"); box.innerHTML = "";
+    for (const [key, t] of Object.entries(templates)) {
+      const probe = { sockets: t.probe };
+      const res = checkLink(picked, probe);
+      const b = document.createElement("button"); b.type = "button";
+      b.className = "pick" + (res.socket ? "" : " no");
+      b.innerHTML = `<b>${t.label}</b><span>${res.msg}</span>`;
+      if (res.socket) b.addEventListener("click", () => attach(key));
+      else b.setAttribute("aria-disabled", "true");
+      box.appendChild(b);
+    }
+  }
+  const sel = document.getElementById("buildSel");
+  sel.hidden = !selected;
+  if (selected) {
+    document.getElementById("selName").textContent = selected.label;
+    const tw = document.getElementById("twist"), tb = document.getElementById("twistBack");
+    tw.disabled = tb.disabled = !selected.own;
+    let note = "最初に置いたコアです";
+    if (selected.own) {
+      const sh = selected.own.userData.rs.shape, a = Math.round(twistAngle(selected));
+      note = `${SHAPE_LABEL[sh]}の接続口なので${SHAPE_STEP[sh]}度ずつひねれます（今 ${a}度）`;
+      if (selected.swing) note += `。このパーツは前に${selected.swing[1]}度、後ろに${-selected.swing[0]}度まで`;
+    }
+    document.getElementById("twistNote").textContent = note;
+    const box = document.getElementById("selAnims"); box.innerHTML = "";
+    for (const clip of selected.clips) {
+      const b = document.createElement("button"); b.className = "btn"; b.type = "button"; b.textContent = clipLabel(clip.name);
+      b.addEventListener("click", () => {
+        selected.mixer.stopAllAction();
+        const a = selected.mixer.clipAction(clip);
+        a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.play();
+      });
+      box.appendChild(b);
+    }
+  }
+  refreshMarks();
+  fitGround();
+}
+function attach(key) {
+  const target = picked;
+  if (!target) return;
+  const inst = instantiate(key);
+  const res = checkLink(target, inst);
+  if (!res.socket) { removeInst(inst); return; }
+  // 合う口がいくつもあるパーツ（胴つなぎのコアの前後など）は、つないだとき一番正面を向く口を使う
+  const want = target.userData.rs;
+  const cands = inst.sockets.filter(s => !s.userData.rs.partner && s.userData.rs.shape === want.shape && s.userData.rs.size === want.size);
+  inst.target = target;
+  target.add(inst.root);
+  let own = res.socket, bs = -Infinity;
+  for (const c of cands) { inst.own = c; const sc = autoRoll(inst); if (sc > bs + 1e-6) { bs = sc; own = c; } }
+  inst.own = own;
+  target.userData.rs.partner = own; own.userData.rs.partner = target;
+  if (cands.length > 1) autoRoll(inst);
+  picked = null; selected = inst;
+  status.textContent = `${inst.label}をつなぎました。光っている接続口をクリックすると、さらにつなげます`;
+  showPanel();
+}
+function removeInst(inst) {
+  const gone = new Set();
+  inst.root.traverse(o => { if (o.userData.inst) gone.add(o.userData.inst); });
+  gone.add(inst);
+  if (inst.target) { inst.target.userData.rs.partner = null; }
+  inst.root.parent && inst.root.parent.remove(inst.root);
+  for (const g of gone) {
+    if (g.mixer) mixers.delete(g.mixer);
+    const i = insts.indexOf(g); if (i >= 0) insts.splice(i, 1);
+  }
+  if (picked && gone.has(picked.userData.rs.inst)) picked = null;
+  if (selected && gone.has(selected)) selected = null;
+}
+function placeCore(key) {
+  const inst = instantiate(key);
+  buildGroup.add(inst.root);
+  selected = inst; picked = null;
+  status.textContent = "光っている接続口をクリックして、パーツをつなぎましょう";
+  showPanel();
+}
+document.getElementById("twist").addEventListener("click", () => { if (selected && selected.own) twistBy(selected, 1); });
+document.getElementById("twistBack").addEventListener("click", () => { if (selected && selected.own) twistBy(selected, -1); });
+document.getElementById("remove").addEventListener("click", () => {
+  if (!selected) return;
+  removeInst(selected); status.textContent = "外しました"; showPanel();
+});
+function resetBuild() {
+  randomBuild.rejected = 0;
+  for (const inst of [...insts]) if (!inst.target) { removeInst(inst); }
+  for (const c of [...buildGroup.children]) buildGroup.remove(c);
+  insts.length = 0; picked = null; selected = null;
+}
+document.getElementById("reset").addEventListener("click", () => {
+  resetBuild(); setRun(false);
+  document.getElementById("miningCtl").hidden = true;
+  document.getElementById("bossCtl").hidden = true;
+  status.textContent = "はじめに置くコアを選びましょう"; showPanel();
+});
+
+// 見本の組み合わせ：人がクリックするのと同じ手順（空いている接続口を選ぶ → つなぐ）で組み立てる
+const _wp = new THREE.Vector3();
+function freeSock(inst, shape, size, side) {
+  const c = inst.sockets.filter(s => !s.userData.rs.partner && s.userData.rs.shape === shape && s.userData.rs.size === size);
+  if (!side) return c[0];
+  buildGroup.updateMatrixWorld(true);
+  if (side === "down") return c.sort((a, b) => a.getWorldPosition(_wp).y - b.getWorldPosition(new THREE.Vector3()).y)[0];
+  if (side === "front" || side === "back") {   // 前＝+z
+    c.sort((a, b) => b.getWorldPosition(_wp).z - a.getWorldPosition(new THREE.Vector3()).z);
+    return side === "front" ? c[0] : c[c.length - 1];
+  }
+  const sx = s => s.getWorldPosition(_wp).x;
+  c.sort((a, b) => sx(a) - sx(b));
+  return side === "left" ? c[0] : c[c.length - 1];
+}
+function addTo(inst, shape, size, side, key) {
+  const s = inst && freeSock(inst, shape, size, side);
+  if (!s || !templates[key]) return null;
+  picked = s; attach(key);
+  return insts[insts.length - 1];
+}
+const RECIPES = {
+  human: { label: "人型", legs: "Leg", lower: true },
+  wheel: { label: "車輪型", legs: "LegWheel", lower: true },
+  mini: { label: "小型（コア1つ）", legs: "Leg", lower: false },
+  mining: { label: "採掘ロボ" },
+  golem: { label: "遺跡を掘るゴーレム" },
+  golemH: { label: "古代ゴーレム" },
+  boss: { label: "塔の番人（ボス）" },
+  // spines＝コアとコアの間の背骨の本数。1本（1.6m 間隔）だと対角歩きで前後の脚がぶつかる。2本（2.2m）ならぶつからない（11/09 実験）
+  quad: { label: "四つ足", segs: 2, spines: 2 },
+  six: { label: "六本脚", segs: 3, spines: 2 },
+  octo: { label: "八本脚", segs: 4, spines: 2 },
+};
+// 四つ足・六本脚：胴つなぎのコア（前後に四角M・下に四角L）を前後につなぎ、どのコアにも腰＋脚2本を付ける。
+// 脚の数はコアの数で決まる。新しい脚パーツは作らず、ゴーレムの脚（太もも→すね→足）をそのまま使う
+function buildMultiLeg(name) {
+  const r = RECIPES[name];
+  const need = ["CoreBody", "GolemHeadEye", "Hip", "GolemThigh", "GolemShin", "GolemFoot", "Spine"];
+  if (need.some(k => !templates[k])) return;
+  resetBuild(); setRun(false); startMove(null);
+  const first = instantiate("CoreBody"); buildGroup.add(first.root);
+  addTo(first, "CIRCLE", "M", null, "GolemHeadEye");
+  const segs = [first];
+  // 胴と胴の間は「背骨（つなぎ）」でつなぐ。コアどうしを直につなぐと、前後の脚がぶつかるほど近いため
+  for (let i = 1; i < r.segs; i++) {
+    let spine = addTo(segs[i - 1], "SQUARE", "M", "back", "Spine");
+    for (let k = 1; k < (r.spines || 1) && spine; k++) spine = addTo(spine, "SQUARE", "M", null, "Spine");   // 背骨を2本以上つなぐと胴が長くなる
+    segs.push(spine ? addTo(spine, "SQUARE", "M", null, "CoreBody") : null);
+  }
+  for (const seg of segs) {
+    if (!seg) continue;
+    const hip = addTo(seg, "SQUARE", "L", "down", "Hip");
+    for (const side of ["left", "right"]) {
+      const th = addTo(hip, "HEX", "M", side, "GolemThigh");
+      const sh = addTo(th, "SQUARE", "S", null, "GolemShin");
+      addTo(sh, "CIRCLE", "S", null, "GolemFoot");
+    }
+  }
+  finishRecipe(r);
+  applyTheme("ANCIENT");
+  fitGround();
+}
+// 塔の番人（ボス）：祭壇コア（前後に装甲の口）＋胸板。腕・脚は関節ごとに別パーツ（上腕→前腕→手、太もも→すね→足）
+// 右手は石の拳、左手は手のひら砲。手首は丸Sなので、どちらの手も付け替えられる
+function buildBoss() {
+  const need = ["CoreAltarB", "BossHead", "BossChest", "BossHip", "BossShoulder", "BossUpperArm", "BossForearm", "BossFist", "BossPalm", "BossThigh", "BossShin", "BossFoot"];
+  if (need.some(k => !templates[k])) return;
+  resetBuild(); setRun(false); startMove(null);
+  const core = instantiate("CoreAltarB"); buildGroup.add(core.root);
+  addTo(core, "CIRCLE", "M", null, "BossHead");
+  buildGroup.updateMatrixWorld(true);
+  const front = core.sockets.filter(s => s.userData.rs.shape === "SQUARE" && s.userData.rs.size === "M")
+    .sort((a, b) => b.getWorldPosition(_wp).z - a.getWorldPosition(new THREE.Vector3()).z)[0];  // 前（three では +z）
+  picked = front; attach("BossChest");
+  const shL = addTo(core, "CIRCLE", "L", "left", "BossShoulder");
+  const shR = addTo(core, "CIRCLE", "L", "right", "BossShoulder");
+  const arm = (sh, hand) => {
+    const ua = addTo(sh, "HEX", "M", null, "BossUpperArm");
+    const fa = addTo(ua, "SQUARE", "S", null, "BossForearm");
+    addTo(fa, "CIRCLE", "S", null, hand);
+  };
+  arm(shL, "BossFist"); arm(shR, "BossPalm");
+  const hip = addTo(core, "SQUARE", "L", "down", "BossHip");
+  for (const side of ["left", "right"]) {
+    const th = addTo(hip, "HEX", "M", side, "BossThigh");
+    const sh = addTo(th, "SQUARE", "S", null, "BossShin");
+    addTo(sh, "CIRCLE", "S", null, "BossFoot");
+  }
+  finishRecipe(RECIPES.boss);
+  document.getElementById("bossCtl").hidden = false;
+  applyTheme("ANCIENT");
+  fitGround();
+}
+// 古代ゴーレム（人型）：祭壇コア＋ゴーレムの頭・腕・脚（肩と腰は共通パーツ）
+function buildGolem() {
+  const need = ["CoreAltarH", "GolemUpperArm", "GolemForearm", "GolemFist", "GolemThigh", "GolemShin", "GolemFoot"];
+  if (need.some(k => !templates[k])) return;
+  resetBuild(); setRun(false); startMove(null);
+  const core = instantiate("CoreAltarH"); buildGroup.add(core.root);
+  addTo(core, "CIRCLE", "M", null, templates.GolemHeadEye ? "GolemHeadEye" : "GolemHead");
+  const shL = addTo(core, "CIRCLE", "L", "left", "Shoulder");
+  const shR = addTo(core, "CIRCLE", "L", "right", "Shoulder");
+  // 腕・脚は関節ごとに別パーツ（決まり事 1）：上腕→前腕→手、太もも→すね→足
+  for (const sh of [shL, shR]) {
+    const ua = addTo(sh, "HEX", "M", null, "GolemUpperArm");
+    const fa = addTo(ua, "SQUARE", "S", null, "GolemForearm");
+    addTo(fa, "CIRCLE", "S", null, "GolemFist");
+  }
+  const hip = addTo(core, "SQUARE", "L", null, "Hip");
+  for (const side of ["left", "right"]) {
+    const th = addTo(hip, "HEX", "M", side, "GolemThigh");
+    const sn = addTo(th, "SQUARE", "S", null, "GolemShin");
+    addTo(sn, "CIRCLE", "S", null, "GolemFoot");
+  }
+  finishRecipe(RECIPES.golemH);
+  document.getElementById("golemCtl").hidden = false;
+  applyTheme("ANCIENT");
+  fitGround();
+}
+// 採掘ロボ：コアの下にキャタピラ、上に上部ユニット、その前からアーム（元・先）、先に道具
+function buildMining(tool = "Pickaxe", ancient = false) {
+  const r = ancient ? RECIPES.golem : RECIPES.mining;
+  const headKey = ancient && templates.GolemHead ? "GolemHead" : "UpperUnit";
+  if (!templates.CoreMining || !templates.Crawler) return;
+  resetBuild(); setRun(false); startMove(null);
+  const core = instantiate(ancient && templates.CoreAltar ? "CoreAltar" : "CoreMining"); buildGroup.add(core.root);
+  addTo(core, "CIRCLE", "L", "down", "Crawler");
+  const up = addTo(core, "CIRCLE", "M", null, headKey);
+  const boom = addTo(up, "SQUARE", "M", null, "Link_L");
+  const stick = addTo(boom, "SQUARE", "M", null, "Link_M");
+  addTo(stick, "SQUARE", "M", null, tool);
+  finishRecipe(r);
+  document.getElementById("miningCtl").hidden = false;
+  if (ancient) applyTheme("ANCIENT");  // 形の差し替え＋世界観の差し替え
+  // 道具を振りかざした姿勢で見せる（カメラもこの姿勢に合わせる）
+  const bj = jointOf("Link_L", "Boom"), stk = jointOf("Link_M", "Stick");
+  if (bj) bj.rotation.x = THREE.MathUtils.degToRad(62);
+  if (stk) stk.rotation.x = THREE.MathUtils.degToRad(-84);
+  fitGround();
+  updateToolBtn();
+}
+const TOOLS = { Pickaxe: "ツルハシ", Sword: "剣" };
+const toolInst = () => insts.find(i => i.key in TOOLS);
+function updateToolBtn() {
+  const t = toolInst();
+  document.getElementById("toolSwap").textContent = t && t.key === "Sword" ? "ツルハシに持ち替える" : "剣に持ち替える";
+}
+// 道具の持ち替え：同じ接続口（四角M）から外して、もう片方をつなぐ
+function swapTool() {
+  const t = toolInst();
+  if (!t || !t.target) return;
+  const next = t.key === "Pickaxe" ? "Sword" : "Pickaxe";
+  if (!templates[next]) return;
+  const target = t.target;
+  removeInst(t);
+  picked = target; attach(next);
+  picked = null; selected = null;
+  status.textContent = `${TOOLS[next]}に持ち替えました`;
+  updateToolBtn(); showPanel();
+}
+let running = false;
+function setRun(on) {
+  running = on;
+  const b = document.getElementById("runToggle");
+  b.setAttribute("aria-pressed", String(on));
+  b.textContent = on ? "キャタピラを止める" : "キャタピラを回す";
+}
+document.getElementById("runToggle").addEventListener("click", () => setRun(!running));
+document.getElementById("toolSwap").addEventListener("click", swapTool);
+// 履帯：1周（板1枚ぶん）を 8/30 秒で送る。車輪は同じ速さで転がる（角度 = 進んだ長さ ÷ 半径）
+const TRACK_PITCH = 0.153, TRACK_PERIOD = 8 / 30;
+// ロボット全体の動作（Blender のコアに入れた動作と同じ数字）。[パーツ, 関節, 左右, [[フレーム, 度], ...]]
+// 左右は L＝x がプラス側。採掘ロボ：CORE_M の Mining_Dig / Mining_Ready、ゴーレム：CORE_G の Golem_Walk / Golem_Smash
+const ROBOT_MOVES = {
+  dig: { loop: true, tracks: [
+    ["Link_L", "Boom", null, [[1, 55], [10, 68], [17, 8], [21, 12], [37, 55]]],
+    ["Link_M", "Stick", null, [[1, -84], [10, -90], [17, 72], [21, 64], [37, -84]]]] },
+  ready: { loop: false, tracks: [
+    ["Link_L", "Boom", null, [[1, 0], [12, 70], [16, 62], [30, 62]]],
+    ["Link_M", "Stick", null, [[1, 0], [12, -90], [16, -84], [30, -84]]]] },
+  walk: { loop: true, tracks: [
+    ["GolemThigh", "Bend", "L", [[1, 0], [11, -35], [21, 0], [31, 15], [41, 0]]],
+    ["GolemShin", "Bend", "L", [[1, 0], [11, 50], [21, 0], [31, 10], [41, 0]]],
+    ["GolemFoot", "Bend", "L", [[1, 0], [11, -15], [21, 0], [31, -20], [41, 0]]],
+    ["GolemThigh", "Bend", "R", [[1, 0], [11, 15], [21, 0], [31, -35], [41, 0]]],
+    ["GolemShin", "Bend", "R", [[1, 0], [11, 10], [21, 0], [31, 50], [41, 0]]],
+    ["GolemFoot", "Bend", "R", [[1, 0], [11, -20], [21, 0], [31, -15], [41, 0]]],
+    ["GolemUpperArm", "Bend", "L", [[1, 0], [11, 20], [21, 0], [31, -20], [41, 0]]],
+    ["GolemUpperArm", "Bend", "R", [[1, 0], [11, -20], [21, 0], [31, 20], [41, 0]]],
+    ["GolemForearm", "Bend", "L", [[1, -10], [11, -5], [21, -10], [31, -30], [41, -10]]],
+    ["GolemForearm", "Bend", "R", [[1, -10], [11, -30], [21, -10], [31, -5], [41, -10]]]] },
+  smash: { loop: false, tracks: [
+    ["GolemUpperArm", "Bend", "L", [[1, 0], [12, -150], [18, -35], [26, -35], [40, 0]]],
+    ["GolemUpperArm", "Bend", "R", [[1, 0], [12, -150], [18, -35], [26, -35], [40, 0]]],
+    ["GolemForearm", "Bend", "L", [[1, 0], [12, -90], [18, -5], [26, -5], [40, 0]]],
+    ["GolemForearm", "Bend", "R", [[1, 0], [12, -90], [18, -5], [26, -5], [40, 0]]],
+    ["GolemThigh", "Bend", "L", [[1, 0], [12, 0], [18, -20], [26, -20], [40, 0]]],
+    ["GolemThigh", "Bend", "R", [[1, 0], [12, 0], [18, -20], [26, -20], [40, 0]]],
+    ["GolemShin", "Bend", "L", [[1, 0], [12, 0], [18, 25], [26, 25], [40, 0]]],
+    ["GolemShin", "Bend", "R", [[1, 0], [12, 0], [18, 25], [26, 25], [40, 0]]]] },
+  // 塔の番人：CORE_BOSS の Boss_Blast / Boss_Smash と同じ数字。左（x プラス側）が手のひら砲
+  // Blender の見せ動画（Boss_v1 の Reel）と同じ数字。"__core__" はコアごと：lean＝前に倒す角度、dz＝上下（m）。
+  // 足は地面に付いたまま（Blender で脚の角度を解いて求めた値）
+  bossWalk: { loop: true, tracks: [
+    ["BossFoot", "Bend", "L", [[1, 0.0], [16, -18.0], [31, 0.0], [46, -18.0], [61, 0.0]]],
+    ["BossFoot", "Bend", "R", [[1, 0.0], [16, -18.0], [31, 0.0], [46, -18.0], [61, 0.0]]],
+    ["BossForearm", "Bend", "L", [[1, -15.0], [16, -15.0], [31, -15.0], [46, -30.0], [61, -15.0]]],
+    ["BossForearm", "Bend", "R", [[1, -15.0], [16, -30.0], [31, -15.0], [46, -15.0], [61, -15.0]]],
+    ["BossShin", "Bend", "L", [[1, 0.0], [16, 60.0], [31, 0.0], [46, 6.0], [61, 0.0]]],
+    ["BossShin", "Bend", "R", [[1, 0.0], [16, 6.0], [31, 0.0], [46, 60.0], [61, 0.0]]],
+    ["BossThigh", "Bend", "L", [[1, 0.0], [16, -38.0], [31, 0.0], [46, 14.0], [61, 0.0]]],
+    ["BossThigh", "Bend", "R", [[1, 0.0], [16, 14.0], [31, 0.0], [46, -38.0], [61, 0.0]]],
+    ["BossUpperArm", "Bend", "L", [[1, 0.0], [16, 22.0], [31, 0.0], [46, -22.0], [61, 0.0]]],
+    ["BossUpperArm", "Bend", "R", [[1, 0.0], [16, -22.0], [31, 0.0], [46, 22.0], [61, 0.0]]],
+    ["__core__", "dz", null, [[1, -0.0], [16, -0.16], [31, 0.02], [46, -0.16], [61, -0.0]]],
+    ["__core__", "lean", null, [[1, 4.0], [16, 4.0], [31, 4.0], [46, 4.0], [61, 4.0]]]] },
+  // 手のひらから撃つときは手を上げて、手首をひねって指を上・手のひらを前に向ける（立っているときは手のひらが内側）
+  bossBlast: { loop: false, shot: [41, "BossPalm"], tracks: [
+    ["BossFoot", "Bend", "L", [[1, 0.0], [16, -22.3], [38, -24.0], [42, -28.8], [50, -30.0], [62, -22.0], [78, 0.0]]],
+    ["BossFoot", "Bend", "R", [[1, 0.0], [16, -22.3], [38, -24.0], [42, -29.0], [50, -30.0], [62, -22.0], [78, 0.0]]],
+    ["BossForearm", "Bend", "L", [[1, 0.0], [16, -60.0], [38, -60.0], [42, -52.0], [50, -60.0], [62, -60.0], [78, 0.0]]],
+    ["BossForearm", "Bend", "R", [[1, 0.0], [16, -25.0], [38, -30.0], [42, -35.0], [50, -30.0], [62, 0.0], [78, 0.0]]],
+    ["BossPalm", "Bend", null, [[1, 0.0], [16, 0.0], [38, 0.0], [42, -12.0], [50, 0.0], [62, 0.0], [78, 0.0]]],
+    ["BossPalm", "__twist__", null, [[1, 0.0], [16, 1.0], [62, 1.0], [78, 0.0]]],
+    ["BossShin", "Bend", "L", [[1, 0.0], [16, 51.3], [38, 62.7], [42, 46.3], [50, 55.0], [62, 47.5], [78, 0.0]]],
+    ["BossShin", "Bend", "R", [[1, 0.0], [16, 51.3], [38, 62.7], [42, 46.8], [50, 55.0], [62, 47.5], [78, 0.0]]],
+    ["BossThigh", "Bend", "L", [[1, 0.0], [16, -33.0], [38, -46.8], [42, -10.5], [50, -22.0], [62, -27.5], [78, 0.0]]],
+    ["BossThigh", "Bend", "R", [[1, 0.0], [16, -33.0], [38, -46.8], [42, -10.7], [50, -22.0], [62, -27.5], [78, 0.0]]],
+    ["BossUpperArm", "Bend", "L", [[1, 0.0], [16, -110.0], [38, -110.0], [42, -118.0], [50, -110.0], [62, -110.0], [78, 0.0]]],
+    ["BossUpperArm", "Bend", "R", [[1, 0.0], [16, 15.0], [38, 18.0], [42, 25.0], [50, 18.0], [62, 0.0], [78, 0.0]]],
+    ["__core__", "dz", null, [[1, -0.0], [16, -0.35], [38, -0.5], [42, -0.3], [50, -0.38], [62, -0.3], [78, -0.0]]],
+    ["__core__", "lean", null, [[1, 0.0], [16, 4.0], [38, 8.0], [42, -7.0], [50, -3.0], [62, 2.0], [78, 0.0]]]] },
+  bossSmash: { loop: false, impact: [32, "BossFist"], tracks: [
+    ["BossFist", "Bend", null, [[1, 0.0], [15, -20.0], [25, -25.0], [32, 10.0], [35, 12.0], [47, 10.0], [75, 0.0], [89, 0.0]]],
+    ["BossFoot", "Bend", "L", [[1, 0.0], [15, -7.0], [25, -8.7], [32, -7.2], [35, -6.3], [47, -8.5], [75, 0.0], [89, 0.0]]],
+    ["BossFoot", "Bend", "R", [[1, 0.0], [15, -7.0], [25, -8.7], [32, -7.2], [35, -6.3], [47, -8.3], [75, 0.0], [89, 0.0]]],
+    ["BossForearm", "Bend", "L", [[1, 0.0], [15, -30.0], [25, -35.0], [32, -20.0], [35, -25.0], [47, -20.0], [75, 0.0], [89, 0.0]]],
+    ["BossForearm", "Bend", "R", [[1, 0.0], [15, -115.0], [25, -120.0], [32, 0.0], [35, 0.0], [47, 0.0], [75, 0.0], [89, 0.0]]],
+    ["BossShin", "Bend", "L", [[1, 0.0], [15, 0.0], [25, 0.0], [32, 76.2], [35, 75.2], [47, 76.8], [75, 0.0], [89, 0.0]]],
+    ["BossShin", "Bend", "R", [[1, 0.0], [15, 0.0], [25, 0.0], [32, 75.8], [35, 75.2], [47, 76.2], [75, 0.0], [89, 0.0]]],
+    ["BossThigh", "Bend", "L", [[1, 0.0], [15, 17.0], [25, 21.7], [32, -99.0], [35, -100.0], [47, -97.3], [75, 0.0], [89, 0.0]]],
+    ["BossThigh", "Bend", "R", [[1, 0.0], [15, 17.0], [25, 21.7], [32, -98.5], [35, -100.0], [47, -97.0], [75, 0.0], [89, 0.0]]],
+    ["BossUpperArm", "Bend", "L", [[1, 0.0], [15, 25.0], [25, 30.0], [32, 35.0], [35, 38.0], [47, 30.0], [75, 0.0], [89, 0.0]]],
+    ["BossUpperArm", "Bend", "R", [[1, 0.0], [15, -100.0], [25, -100.0], [32, -33.0], [35, -32.0], [47, -33.0], [75, 0.0], [89, 0.0]]],
+    ["__core__", "dz", null, [[1, -0.0], [15, 0.05], [25, 0.08], [32, -1.1], [35, -1.14], [47, -1.08], [75, -0.0], [89, -0.0]]],
+    ["__core__", "lean", null, [[1, 0.0], [15, -10.0], [25, -13.0], [32, 30.0], [35, 31.0], [47, 29.0], [75, 0.0], [89, 0.0]]]] },
+};
+// エネルギー弾：手のひら（手首の先）から前へ飛ぶ光の玉
+const shots = [];
+function fireShot(key) {
+  const hand = insts.find(i => i.key === key);
+  if (!hand) return;
+  hand.root.updateWorldMatrix(true, true);
+  const c = new THREE.Box3().setFromObject(hand.root).getCenter(new THREE.Vector3());
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 14), new THREE.MeshBasicMaterial({ color: 0x7ff5e6 }));
+  ball.add(new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), new THREE.MeshBasicMaterial({ color: 0x2fe0c8, transparent: true, opacity: 0.35 })));
+  buildGroup.worldToLocal(c); ball.position.copy(c);
+  buildGroup.add(ball);
+  shots.push({ m: ball, t: 0 });
+}
+// 拳が地面に当たった：衝撃波の輪・石の破片・画面の揺れ
+const debris = []; let shake = 0;
+function impactAt(key) {
+  const hand = insts.find(i => i.key === key);
+  if (!hand) return;
+  buildGroup.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(buildGroup);
+  const c = new THREE.Box3().setFromObject(hand.root).getCenter(new THREE.Vector3());
+  c.y = box.min.y + 0.03;
+  buildGroup.worldToLocal(c);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 48), new THREE.MeshBasicMaterial({ color: 0xc8b391, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.copy(c); buildGroup.add(ring);
+  shots.push({ m: ring, t: 0, ring: true });
+  for (let k = 0; k < 10; k++) {
+    const s = 0.12 + Math.random() * 0.16;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ color: 0x575047, roughness: 0.9 }));
+    m.position.copy(c); buildGroup.add(m);
+    const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 4;
+    debris.push({ m, v: new THREE.Vector3(Math.cos(a) * v, 4 + Math.random() * 4, Math.sin(a) * v), t: 0, floor: c.y + s / 2 });
+  }
+  shake = 0.45;
+}
+function updateShots(dt) {
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const d = debris[i]; d.t += dt;
+    d.v.y -= 9.8 * dt; d.m.position.addScaledVector(d.v, dt);
+    if (d.m.position.y < d.floor) { d.m.position.y = d.floor; d.v.multiplyScalar(0.4); d.v.y = Math.abs(d.v.y) * 0.3; }
+    d.m.rotation.x += dt * 6; d.m.rotation.z += dt * 4;
+    if (d.t > 1.4) { buildGroup.remove(d.m); debris.splice(i, 1); }
+  }
+  if (shake > 0) {
+    shake = Math.max(0, shake - dt);
+    const a = shake * 0.35;
+    camera.position.x += (Math.random() - 0.5) * a; camera.position.y += (Math.random() - 0.5) * a;
+  }
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i]; s.t += dt;
+    if (s.ring) {
+      s.m.scale.setScalar(0.3 + s.t * 9); s.m.material.opacity = Math.max(0, 0.8 * (1 - s.t / 0.7));
+      if (s.t > 0.7) { buildGroup.remove(s.m); shots.splice(i, 1); }
+      continue;
+    }
+    s.m.position.z += dt * 9;  // 前（three では +z）へ
+    s.m.scale.setScalar(1 + Math.sin(s.t * 30) * 0.08);
+    if (s.t > 1.6) { buildGroup.remove(s.m); shots.splice(i, 1); }
+  }
+}
+let move = null, moveT = 0;
+function keyAt(keys, f) {
+  if (f <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const [f1, v1] = keys[i], [f0, v0] = keys[i - 1];
+    if (f <= f1) { const t = (f - f0) / (f1 - f0), e = t * t * (3 - 2 * t); return v0 + (v1 - v0) * e; }
+  }
+  return keys[keys.length - 1][1];
+}
+function jointOf(key, name, side = null) {
+  const _p = new THREE.Vector3();
+  let list = insts.filter(i => i.key === key);
+  if (side) {
+    buildGroup.updateMatrixWorld(true);
+    list = list.filter(i => (i.root.getWorldPosition(_p).x >= 0) === (side === "L"));
+  }
+  let j = null;
+  list[0] && list[0].root.traverse(o => { if (!j && o.userData.rs_joint_type && shownName(o.name).endsWith(name)) j = o; });
+  return j;
+}
+// 手首のひねり（"__twist__"）：値 1 で「手のひらを後ろへ」ひねりきる。手は普段、手のひらが内側（横向き）
+// なので、左右で回す向きが逆になる（体の +x 側の手は +90 度、−x 側は −90 度）
+const twisted = new Set();
+function twistOf(key, side = null) {
+  const _p = new THREE.Vector3();
+  buildGroup.updateMatrixWorld(true);
+  let list = insts.filter(i => i.key === key && i.own);
+  if (side) list = list.filter(i => (i.root.getWorldPosition(_p).x >= 0) === (side === "L"));
+  const inst = list[0];
+  if (!inst) return null;
+  const core = rootInstOf(inst).root;
+  const x = core.worldToLocal(inst.root.getWorldPosition(_p)).x;
+  return { twist: inst, full: x >= 0 ? 90 : -90 };
+}
+// コアごと動かす（前に倒す・沈む）。元の位置は覚えておいて、動作が変わったら戻す
+function coreRoot() {
+  const c = insts.find(i => !i.target);
+  if (!c) return null;
+  if (c.root.userData.baseY === undefined) c.root.userData.baseY = c.root.position.y;
+  return c.root;
+}
+function resetCore() {
+  const r = coreRoot();
+  if (r) { r.rotation.x = 0; r.position.y = r.userData.baseY; }
+}
+function startMove(name) {
+  // 「歩く」は手付けの表ではなく、テスト部屋と同じ歩き方の式で動かす（手付けの表は足を出す位相が逆で、後ろへ歩いて見えた・11/10）
+  if (name === "walk" || name === "bossWalk") {
+    stopJsonMove(); move = null; stopAutoMove();
+    autoMove = tunePlan(planAutoMotion());
+    const w = document.getElementById(name === "walk" ? "walkToggle" : "bossWalk");
+    w.setAttribute("aria-pressed", "true"); w.textContent = "止まる";
+    return;
+  }
+  if (autoMove && !testMode) stopAutoMove();
+  move = name ? ROBOT_MOVES[name] : null; moveT = 0;
+  if (move) move.fired = false;
+  for (const i of twisted) { i.roll = i.rest; placeOn(i); }
+  twisted.clear();
+  if (move) move.joints = move.tracks.map(([k, j, s]) => k === "__core__" ? coreRoot() : j === "__twist__" ? twistOf(k, s) : jointOf(k, j, s));
+  resetCore();
+  for (const i of insts) if (i.mixer) i.mixer.stopAllAction();
+  const b = document.getElementById("digToggle");
+  b.setAttribute("aria-pressed", String(name === "dig"));
+  b.textContent = name === "dig" ? "掘るのをやめる" : "掘る";
+  const w = document.getElementById("walkToggle");
+  w.setAttribute("aria-pressed", String(name === "walk"));
+  w.textContent = name === "walk" ? "止まる" : "歩く";
+  const bw = document.getElementById("bossWalk");
+  bw.setAttribute("aria-pressed", String(name === "bossWalk"));
+  bw.textContent = name === "bossWalk" ? "止まる" : "歩く";
+}
+function updateMove(dt) {
+  if (!move) return;
+  moveT += dt;
+  const span = Math.max(...move.tracks.map(t => t[3][t[3].length - 1][0])) - 1;
+  let f = 1 + moveT * 30;
+  if (move.loop) f = 1 + ((f - 1) % span);
+  move.tracks.forEach((t, i) => {
+    const j = move.joints[i]; if (!j) return;
+    const v = keyAt(t[3], f);
+    if (j.twist) { j.twist.roll = j.twist.rest + v * j.full; placeOn(j.twist); twisted.add(j.twist); }
+    else if (t[0] === "__core__") { if (t[1] === "lean") j.rotation.x = THREE.MathUtils.degToRad(v); else j.position.y = j.userData.baseY + v; }
+    else j.rotation.x = THREE.MathUtils.degToRad(v);
+  });
+  if (move.impact && !move.fired && f >= move.impact[0]) { move.fired = true; impactAt(move.impact[1]); }
+  if (move.shot && !move.fired && f >= move.shot[0]) { move.fired = true; fireShot(move.shot[1]); }
+  if (!move.loop && f >= span + 1) move = null;  // 最後の姿勢で止める
+}
+document.getElementById("walkToggle").addEventListener("click", () => startMove(autoMove && !testMode ? null : "walk"));
+document.getElementById("smashBtn").addEventListener("click", () => startMove("smash"));
+document.getElementById("digToggle").addEventListener("click", () => startMove(move === ROBOT_MOVES.dig ? null : "dig"));
+document.getElementById("readyBtn").addEventListener("click", () => startMove("ready"));
+document.getElementById("bossWalk").addEventListener("click", () => startMove(autoMove && !testMode ? null : "bossWalk"));
+document.getElementById("bossBlast").addEventListener("click", () => startMove("bossBlast"));
+document.getElementById("bossSmash").addEventListener("click", () => startMove("bossSmash"));
+
+// ============ 手付けの動き（JSON・役割名ベース） ============
+// Blender の「動作を JSON に書き出す」で書いた web/anims/*.json を読む。関節は名前ではなく役割名（leg.L.knee など）で合わせるので、
+// 同じ役割を持つロボットなら別のパーツ・別の脚の長さでも同じクリップが動く（Blender 側の role_names と同じ決め方）。
+// 値は Blender の座標（上 +Z・正面 −Y）。関節の角度は AXIS_ROT で three の軸に、コアの位置は (x, y, z) → (x, z, −y) に直す
+const ANIM_FILES = ["CORE_G", "CORE_BOSS", "CORE_M"];
+const jsonAnims = [];   // { file, data }
+let jsonMove = null;    // { clip, t, tracks:[{obj, kind, ax, sg, keys, base}], matched, total }
+async function loadAnimJson() {
+  for (const f of ANIM_FILES) {
+    try { const r = await fetch(`anims/${f}.json`); if (r.ok) jsonAnims.push({ file: f, data: await r.json() }); } catch (e) { /* 無ければ飛ばす */ }
+  }
+  const sel = document.getElementById("testClip");
+  sel.innerHTML = "";
+  for (const a of jsonAnims) for (const c of a.data.clips) {
+    const o = document.createElement("option"); o.value = `${a.file}/${c.name}`; o.textContent = `${c.name}（${c.loop ? "くり返し" : "1回"}・${c.tracks.length}関節）`; sel.appendChild(o);
+  }
+  if (!sel.options.length) { const o = document.createElement("option"); o.value = ""; o.textContent = "（JSON がありません）"; sel.appendChild(o); }
+}
+// 役割名 → 関節オブジェクト。接続口の向きで leg/arm/head/tool、コアから見た x で L/R、根元からの順番で hip/knee/ankle（腕は shoulder/elbow/wrist、ほかは j1,j2…）
+function roleMapWeb() {
+  const plan = planAutoMotion();
+  roleMapWeb.lastPlan = plan;
+  const map = new Map();
+  if (!plan) return map;
+  map.set("root", plan.core);
+  const cInv = plan.core.matrixWorld.clone().invert();
+  const js = plan.joints.filter(j => !j.wheel);
+  const jset = new Set(js.map(j => j.o));
+  // 根元からの順番（車輪以外の関節の先祖の数）と、枝の根元
+  for (const j of js) {
+    let n = 0, p = j.o.parent, rootJ = j.o;
+    while (p && p !== plan.core) { if (jset.has(p)) { n++; rootJ = p; } p = p.parent; }
+    j.kk = n; j.rootJ = rootJ;
+  }
+  // 脚の組（前後位置。前＝+z が先）
+  const zs = [...new Set(js.filter(j => j.role === "leg" && j.kk === 0).map(j => Math.round(j.o.getWorldPosition(new THREE.Vector3()).applyMatrix4(cInv).z * 4) / 4))].sort((a, b) => b - a);
+  const labels = { leg: ["hip", "knee", "ankle"], arm: ["shoulder", "elbow", "wrist"] };
+  const used = new Set();
+  for (const r of js.filter(j => j.kk === 0)) {
+    const base = r.role === "top" ? "head" : (r.role === "spine" ? "tool" : r.role);
+    const x = r.o.getWorldPosition(new THREE.Vector3()).applyMatrix4(cInv).x;
+    let side = x >= -1e-3 ? "L" : "R";
+    if (base === "leg" && zs.length > 1) side += zs.indexOf(Math.round(r.o.getWorldPosition(new THREE.Vector3()).applyMatrix4(cInv).z * 4) / 4) + 1;
+    const chain = [r, ...js.filter(j => j.rootJ === r.o && j !== r).sort((a, b) => a.kk - b.kk)];
+    chain.forEach((j, k) => {
+      const lab = (labels[base] || [])[k] || `j${k + 1}`;
+      let nm = `${base}.${side}.${lab}`, n = 2;
+      while (used.has(nm)) nm = `${base}.${side}.${lab}_${n++}`;
+      used.add(nm); map.set(nm, j.o);
+    });
+  }
+  return map;
+}
+// キー [t, v, 入りの傾き, 出の傾き, 種類?] を時刻 t で読む（エルミート補間。linear／step も可）
+function jsonKeyAt(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const k0 = keys[i - 1], k1 = keys[i];
+    if (t <= k1[0]) {
+      const h = k1[0] - k0[0]; if (h <= 0) return k1[1];
+      if (k0[4] === "step") return k0[1];
+      const u = (t - k0[0]) / h;
+      if (k0[4] === "linear") return k0[1] + (k1[1] - k0[1]) * u;
+      const m0 = k0[3] * h, m1 = k1[2] * h, u2 = u * u, u3 = u2 * u;
+      return (2 * u3 - 3 * u2 + 1) * k0[1] + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * k1[1] + (u3 - u2) * m1;
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+function startJsonMove(id) {
+  stopJsonMove();
+  if (!id) return null;
+  const [file, name] = id.split("/");
+  const a = jsonAnims.find(x => x.file === file); const clip = a && a.data.clips.find(c => c.name === name);
+  if (!clip) return null;
+  const map = roleMapWeb();
+  const legL = (roleMapWeb.lastPlan && roleMapWeb.lastPlan.gp) ? roleMapWeb.lastPlan.gp.L : 0;   // 踏ん張りの目安に使う脚の長さ
+  const tracks = [];
+  let matched = 0;
+  for (const tr of clip.tracks) {
+    // 役割名が合う関節。脚が何組もあるロボットに2本脚のクリップを使うときは、leg.L.* を leg.L1.*, leg.L2.* … 全部に当てる
+    let objs = map.has(tr.role) ? [map.get(tr.role)] : [];
+    if (!objs.length) { const m = tr.role.match(/^leg\.([LR])\.(.+)$/); if (m) for (const [k, o] of map) if (new RegExp(`^leg\\.${m[1]}\\d+\\.${m[2]}$`).test(k)) objs.push(o); }
+    if (!objs.length) continue;
+    matched++;
+    for (const obj of objs) {
+      if (tr.prop === "rot") {
+        const [ax, sg] = AXIS_ROT[tr.axis] || AXIS_ROT.X;
+        tracks.push({ obj, kind: "rot", ax, sg, keys: tr.keys, base: obj.rotation[ax] });
+      } else if (tr.prop === "jump") {
+        tracks.push({ obj, kind: "jump", keys: tr.keys });   // 床から浮く高さ（m）。重力のあるテスト部屋では体ごと持ち上げる
+      } else {
+        // Blender の位置 (x, y, z) → three (x, z, −y)
+        const m = { X: ["x", 1], Y: ["z", -1], Z: ["y", 1] }[tr.axis];
+        tracks.push({ obj, kind: "pos", ax: m[0], sg: m[1], keys: tr.keys, base: obj.position[m[0]] });
+      }
+    }
+  }
+  jsonMove = { clip, t: 0, tracks, matched, total: clip.tracks.length, roles: map.size - 1, legL, jump: 0, fired: new Set(), lastEvent: "", freeze: 0, map };
+  document.getElementById("testClipPlay").textContent = "止める";
+  showTestStats();
+  return jsonMove;
+}
+function stopJsonMove() {
+  if (jsonMove) for (const tr of jsonMove.tracks) { if (tr.kind === "rot") tr.obj.rotation[tr.ax] = tr.base; else if (tr.kind === "pos") tr.obj.position[tr.ax] = tr.base; }
+  jsonMove = null;
+  document.getElementById("testClipPlay").textContent = "再生";
+}
+
+// ===== 技の効果（JSON のイベントで出す・11/10）=====
+// カッコよさの半分は「当たった瞬間」にある：ヒットストップ（2〜3 コマ止める）・画面の揺れ・衝撃波・土ぼこり・破片・光。
+// イベント名：takeoff（跳ぶ）・land（着地）・impact（当たる）・charge（力をためる）・cast（放つ）。at＝効果を出す場所（役割パターン）
+const fxList = []; let fxShakeAmp = 0, fxShakeT = 0, fxShakeDur = 0.0001;
+const fxShakeOff = new THREE.Vector3();
+// 土ぼこり：ふちがぼやけた丸い板（いつもカメラを向く）。重ねると煙のかたまりに見える
+const FX_SMOKE_TEX = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.4, "rgba(255,255,255,0.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const FX_DUST = new THREE.SpriteMaterial({ map: FX_SMOKE_TEX, color: 0xcdbfa3, transparent: true, opacity: 0.75, depthWrite: false });
+function fxRoleTips(pat) {
+  // パターンに合う枝（leg.L / arm.R …）ごとに、先端（一番深い関節）の下のメッシュの「一番低い点」と「中心」を返す
+  const map = (jsonMove && jsonMove.map) || roleMapWeb();
+  const re = new RegExp("^" + String(pat || "*").replace(/\./g, "\\.").replace(/\*/g, "[^.]*") + "(\\.|$)");
+  const limbs = new Map();
+  for (const [k, o] of map) {
+    if (k === "root" || !re.test(k)) continue;
+    const limb = k.split(".").slice(0, 2).join(".");
+    let depth = 0; for (let p = o.parent; p; p = p.parent) depth++;
+    const cur = limbs.get(limb); if (!cur || depth > cur.d) limbs.set(limb, { o, d: depth });
+  }
+  buildGroup.updateMatrixWorld(true);
+  const out = [];
+  for (const { o } of limbs.values()) {
+    const box = new THREE.Box3().setFromObject(o);
+    if (box.isEmpty()) continue;
+    const c = box.getCenter(new THREE.Vector3());
+    out.push({ center: c, low: new THREE.Vector3(c.x, box.min.y, c.z), size: box.getSize(new THREE.Vector3()).length() });
+  }
+  return out;
+}
+function fxFloorY() { return phys ? phys.floor : 0; }
+function fxBodySize() { const b = new THREE.Box3().setFromObject(buildGroup); return b.isEmpty() ? 2 : b.getSize(new THREE.Vector3()).y; }
+function fxAdd(m, upd, life) { scene.add(m); fxList.push({ m, upd, life, t: 0 }); }
+function fxRing(pos, radius, color = 0xf3e2c0, life = 0.55, vertical = null) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  m.position.copy(pos);
+  if (vertical) m.lookAt(pos.clone().add(vertical)); else m.rotation.x = -Math.PI / 2;
+  fxAdd(m, (f, k) => { const e = 1 - (1 - k) ** 3; f.m.scale.setScalar(0.15 + radius * e); f.m.material.opacity = 0.75 * (1 - k) ** 1.5; }, life);
+}
+function fxDust(pos, n, spread, size) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Sprite(FX_DUST.clone()); m.material.rotation = Math.random() * 6.28;
+    m.material.color.offsetHSL(0, 0, (Math.random() - 0.5) * 0.12);
+    const a = Math.random() * Math.PI * 2, r = spread * (0.3 + Math.random() * 0.7);
+    const v = new THREE.Vector3(Math.cos(a) * r * 2.2, (0.4 + Math.random() * 0.8) * spread * 0.9, Math.sin(a) * r * 2.2);
+    m.position.copy(pos).add(new THREE.Vector3(Math.cos(a) * spread * 0.2, size * 0.3, Math.sin(a) * spread * 0.2));
+    const s0 = size * (0.4 + Math.random() * 0.6);
+    fxAdd(m, (f, k, dt) => { f.m.position.addScaledVector(v, dt * (1 - k) ** 2); f.m.scale.setScalar(s0 * 2 * (0.5 + 2.2 * Math.sqrt(k))); f.m.material.opacity = 0.75 * Math.min(1, k * 10) * (1 - k) ** 1.4; }, 1.0 + Math.random() * 0.8);
+  }
+}
+function fxDebris(pos, n, size) {
+  const fl = fxFloorY();
+  for (let i = 0; i < n; i++) {
+    const s = size * (0.06 + Math.random() * 0.08);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ color: 0x6a5f52, roughness: 0.9 }));
+    m.position.copy(pos); m.position.y = fl + s;
+    const a = Math.random() * Math.PI * 2, sp = size * (1.2 + Math.random() * 1.8);
+    const v = new THREE.Vector3(Math.cos(a) * sp, size * (1.5 + Math.random() * 2.5), Math.sin(a) * sp);
+    const w = new THREE.Vector3(Math.random() * 12, Math.random() * 12, 0);
+    fxAdd(m, (f, k, dt) => {
+      v.y -= 9.8 * dt; f.m.position.addScaledVector(v, dt);
+      if (f.m.position.y < fl + s / 2) { f.m.position.y = fl + s / 2; v.multiplyScalar(0.45); v.y = Math.abs(v.y) * 0.35; w.multiplyScalar(0.6); }
+      f.m.rotation.x += w.x * dt; f.m.rotation.y += w.y * dt;
+      if (k > 0.8) f.m.scale.setScalar((1 - k) / 0.2);
+    }, 1.6);
+  }
+}
+function fxFlash(pos, size, color = 0xfff4d6, life = 0.22) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }));
+  m.position.copy(pos);
+  const light = new THREE.PointLight(color, 0, size * 8); m.add(light);
+  fxAdd(m, (f, k) => { f.m.scale.setScalar(size * (0.3 + 1.2 * k)); f.m.material.opacity = (1 - k) ** 2; light.intensity = 15 * size * (1 - k) ** 2; }, life);
+}
+function fxShake(amp, dur) { if (amp >= fxShakeAmp * Math.max(0, 1 - fxShakeT / fxShakeDur)) { fxShakeAmp = amp; fxShakeT = 0; fxShakeDur = dur; } }
+function fxHitstop(sec) { if (jsonMove) jsonMove.freeze = Math.max(jsonMove.freeze || 0, sec); }
+// 力をためる光：手に付いて、放つまで大きくなる
+function fxCharge(pat, until) {
+  const tips = fxRoleTips(pat); const H = fxBodySize();
+  for (let i = 0; i < tips.length; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0x7ff5e6, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0x2fe0c8, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(2.2); m.add(halo); m.scale.setScalar(H * 0.02); m.position.copy(tips[i].center);   // 最初のコマから小さく
+    const light = new THREE.PointLight(0x5ff0dc, 0, H * 0.8); m.add(light);
+    const idx = i, clip = jsonMove && jsonMove.clip;
+    fxAdd(m, (f, k) => {
+      const jm = jsonMove; if (!jm || jm.clip !== clip || jm.t >= until) { f.t = f.life; return; }
+      const tp = fxRoleTips(pat)[idx]; if (tp) f.m.position.copy(tp.center);
+      const g = Math.min(1, jm.t / until);
+      f.m.scale.setScalar(H * (0.02 + 0.06 * g) * (1 + 0.15 * Math.sin(jm.t * 40)));
+      light.intensity = 1.5 * H * g;
+    }, 10);
+  }
+}
+// 放った光の玉：体の前へ飛んで、しばらくして弾ける
+function fxBolt(pat) {
+  const tips = fxRoleTips(pat); if (!tips.length) return;
+  const H = fxBodySize();
+  const c = tips.reduce((a, t) => a.add(t.center), new THREE.Vector3()).multiplyScalar(1 / tips.length);
+  const core = roleMapWeb.lastPlan && roleMapWeb.lastPlan.core;
+  const fwd = new THREE.Vector3(0, 0, 1); if (core) fwd.applyQuaternion(core.getWorldQuaternion(new THREE.Quaternion())); fwd.y = 0; fwd.normalize();
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xd8fff9, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0x2fe0c8, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(2); m.add(halo); m.add(new THREE.PointLight(0x5ff0dc, 3 * H, H * 2));
+  m.position.copy(c); m.scale.setScalar(H * 0.09);
+  let trailT = 0;
+  fxAdd(m, (f, k, dt) => {
+    f.m.position.addScaledVector(fwd, H * 3 * dt);   // 目で追える速さ
+    trailT += dt;
+    if (trailT > 0.02) { trailT = 0; const p = f.m.position.clone(); const tm = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0x2fe0c8, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+      tm.position.copy(p); fxAdd(tm, (g, kk) => { g.m.scale.setScalar(H * 0.07 * (1 - kk)); g.m.material.opacity = 0.5 * (1 - kk); }, 0.35); }
+    if (k >= 0.999) { fxFlash(f.m.position, H * 0.35, 0x9ffff2, 0.35); fxRing(f.m.position, H * 0.9, 0x5ff0dc, 0.5, fwd); }
+  }, 1.0);
+  fxFlash(c, H * 0.18, 0xbffff7, 0.2);
+  fxRing(c, H * 0.5, 0x7ff5e6, 0.35, fwd);
+}
+function fxEvent(ev) {
+  const H = fxBodySize(), fl = fxFloorY();
+  const tips = fxRoleTips(ev.at);
+  const lows = tips.length ? tips : [{ center: new THREE.Vector3(), low: new THREE.Vector3(0, fl, 0), size: H * 0.3 }];
+  if (ev.name === "takeoff") {
+    for (const t of lows) fxDust(new THREE.Vector3(t.low.x, fl, t.low.z), 6, H * 0.18, H * 0.06);
+    fxShake(H * 0.006, 0.15);
+  } else if (ev.name === "land") {
+    const c = lows.reduce((a, t) => a.add(t.low), new THREE.Vector3()).multiplyScalar(1 / lows.length); c.y = fl + 0.08;
+    fxRing(c, H * 0.55, 0xf3e2c0, 0.45); fxDust(c, 14, H * 0.3, H * 0.08);
+    fxShake(H * 0.02, 0.3); fxHitstop(0.05);
+  } else if (ev.name === "impact") {
+    // 床の近くで当たったら床の衝撃波、空中なら前向きの衝撃波
+    for (const t of lows) {
+      const nearFloor = t.low.y - fl < H * 0.25;
+      if (nearFloor) {
+        const c = new THREE.Vector3(t.low.x, fl + 0.08, t.low.z);   // 床の板より少し上（同じ高さだと床に隠れる）
+        fxRing(c, H * 1.0, 0xf3e2c0, 0.6); fxRing(c, H * 0.55, 0xffffff, 0.3);
+        fxDust(c, 20, H * 0.45, H * 0.1); fxDebris(c, 12, H * 0.35); fxFlash(c, H * 0.12);
+      } else {
+        const core = roleMapWeb.lastPlan && roleMapWeb.lastPlan.core;
+        const fwd = new THREE.Vector3(0, 0, 1); if (core) fwd.applyQuaternion(core.getWorldQuaternion(new THREE.Quaternion())); fwd.y = 0; fwd.normalize();
+        const c = t.center.clone().addScaledVector(fwd, t.size * 0.3);
+        fxFlash(c, H * 0.16); fxRing(c, H * 0.6, 0xffffff, 0.3, fwd); fxRing(c, H * 0.9, 0xf3e2c0, 0.45, fwd);
+      }
+    }
+    fxShake(H * 0.035, 0.45); fxHitstop(0.1);
+  } else if (ev.name === "charge") {
+    const nxt = (jsonMove.clip.events || []).find(e => e.name === "cast" && e.t > ev.t);
+    fxCharge(ev.at, nxt ? nxt.t : ev.t + 0.6);
+  } else if (ev.name === "cast") {
+    fxBolt(ev.at); fxShake(H * 0.012, 0.25); fxHitstop(0.06);
+  }
+}
+function fxUpdate(dt) {
+  for (let i = fxList.length - 1; i >= 0; i--) {
+    const f = fxList[i]; f.t += dt;
+    const k = Math.min(1, f.t / f.life);
+    f.upd(f, k, dt);
+    if (f.t >= f.life) { scene.remove(f.m); f.m.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== FX_DUST) o.material.dispose(); }); fxList.splice(i, 1); }
+  }
+  fxShakeT += dt;
+  const a = fxShakeAmp * Math.max(0, 1 - fxShakeT / fxShakeDur) ** 2;
+  fxShakeOff.set((Math.random() - 0.5) * 2 * a, (Math.random() - 0.5) * 2 * a * 1.3, (Math.random() - 0.5) * 2 * a);
+}
+function renderShaken() { camera.position.add(fxShakeOff); renderer.render(scene, camera); camera.position.sub(fxShakeOff); }
+function updateJsonMove(dt) {
+  if (!jsonMove) return;
+  if (jsonMove.freeze > 0) { jsonMove.freeze -= dt; return; }   // ヒットストップ：当たった瞬間に少しだけ止める
+  jsonMove.t += dt;
+  const d = jsonMove.clip.duration || 1;
+  let t = jsonMove.t;
+  if (jsonMove.clip.loop) t = t % d; else if (t > d) t = d;
+  const gravityOn = testMode && document.getElementById("testGravity").checked;
+  jsonMove.jump = 0;
+  for (const tr of jsonMove.tracks) {
+    const v = jsonKeyAt(tr.keys, t);
+    if (tr.kind === "rot") tr.obj.rotation[tr.ax] = tr.base + tr.sg * THREE.MathUtils.degToRad(v);
+    else if (tr.kind === "jump") jsonMove.jump = Math.max(0, v);
+    // 重力のあるテスト部屋では、コアの上下（Blender で付けた「しゃがみの補正＋浮く高さ」）は使わず、床への接地と jump で決める
+    else if (!(gravityOn && tr.ax === "y" && tr.obj === (roleMapWeb.lastPlan && roleMapWeb.lastPlan.core))) tr.obj.position[tr.ax] = tr.base + tr.sg * v;
+  }
+  // イベント（当たった瞬間など）：時刻をまたいだら結果欄に出す
+  for (const ev of (jsonMove.clip.events || [])) {
+    const key = ev.name + "@" + ev.t;
+    if (t >= ev.t && !jsonMove.fired.has(key)) { jsonMove.fired.add(key); jsonMove.lastEvent = `${ev.name}（${ev.t.toFixed(2)} 秒）`; if (document.getElementById("testFx") ? document.getElementById("testFx").checked : true) fxEvent(ev); showTestStats(); }
+    if (jsonMove.clip.loop && t < ev.t) jsonMove.fired.delete(key);
+  }
+}
+document.getElementById("testClipPlay").addEventListener("click", () => { if (jsonMove) stopJsonMove(); else { stopAutoMove(); startJsonMove(document.getElementById("testClip").value); } });
+loadAnimJson();
+function updateTracks(dt) {
+  if (!running) return;
+  for (const inst of insts) {
+    if (!inst.tracks.length && !inst.wheels.length) continue;
+    inst.runT += dt;
+    const f = (inst.runT / TRACK_PERIOD) % 1;
+    for (const m of inst.tracks) m.morphTargetInfluences[m.morphTargetDictionary.Move] = f;
+    const dist = inst.runT / TRACK_PERIOD * TRACK_PITCH;
+    for (const w of inst.wheels) w.rotation.x = dist / w.userData.rs_wheel_r;
+  }
+}
+function buildRecipe(name) {
+  if (name === "mining") return buildMining();
+  if (name === "golem") return buildMining("Pickaxe", true);
+  if (name === "golemH") return buildGolem();
+  if (name === "boss") return buildBoss();
+  if (name === "quad" || name === "six" || name === "octo") return buildMultiLeg(name);
+  const r = RECIPES[name];
+  if (!templates.CoreA) return;
+  resetBuild();
+  const core = instantiate("CoreA"); buildGroup.add(core.root);
+  addTo(core, "CIRCLE", "M", null, "Head");
+  const shL = addTo(core, "CIRCLE", "L", "left", "Shoulder");
+  const shR = addTo(core, "CIRCLE", "L", "right", "Shoulder");
+  addTo(shL, "HEX", "M", null, "Arm");
+  addTo(shR, "HEX", "M", null, "ArmBlade");
+  const base = r.lower ? addTo(core, "SQUARE", "L", null, "CoreB") : core;
+  const hip = addTo(base, "SQUARE", "L", null, "Hip");
+  addTo(hip, "HEX", "M", "left", r.legs);
+  addTo(hip, "HEX", "M", "right", r.legs);
+  finishRecipe(r);
+}
+function finishRecipe(r) {
+  picked = null; selected = null;
+  document.getElementById("miningCtl").hidden = r !== RECIPES.mining;
+  document.getElementById("golemCtl").hidden = true;
+  document.getElementById("bossCtl").hidden = true;
+  status.textContent = `${r.label}を組み立てました（パーツ ${insts.length - 1}個）。パーツをクリックすると、ひねる・外す・動作の再生ができます`;
+  showPanel();
+}
+document.querySelectorAll("#recipes [data-recipe]").forEach(b => b.addEventListener("click", () => buildRecipe(b.dataset.recipe)));
+
+// クリック：接続口の印 → つなぐパーツを選ぶ / パーツ → 選ぶ
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let downAt = null;
+renderer.domElement.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", e => {
+  if (!buildGroup.visible || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const marks = []; for (const inst of insts) for (const s of inst.sockets) if (s.userData.rs.mark.visible) marks.push(s.userData.rs.hit);
+  const hm = ray.intersectObjects(marks, false)[0];
+  if (hm) { picked = hm.object.userData.socket; selected = null; showPanel(); return; }
+  const hp = ray.intersectObjects(buildGroup.children, true).find(h => h.object.userData.inst && !h.object.userData.isMark);
+  if (hp) { selected = hp.object.userData.inst; picked = null; showPanel(); return; }
+  picked = null; showPanel();
+});
+
+// 置き場の読み込み（parts.json と、パーツごとの GLB）
+fetch("parts.json").then(r => r.json()).then(async lib => {
+  const corePicks = document.getElementById("corePicks");
+  const loaded = await Promise.all(lib.parts.map(p => loadGLB(p.file)));  // まとめて並行に読む
+  for (const [n, p] of lib.parts.entries()) {
+    const gltf = loaded[n];
+    // 一致チェックに使う「このパーツの接続口の一覧」（形と大きさだけ）
+    const probe = [];
+    gltf.scene.traverse(o => { const info = socketInfo(o); if (info) probe.push({ userData: { rs: { ...info, partner: null } } }); });
+    templates[p.key] = { label: p.label, kind: p.kind, gltf, probe };
+    if (p.kind === "core") {
+      const b = document.createElement("button"); b.type = "button"; b.className = "pick";
+      b.innerHTML = `<b>${p.label}</b><span>${probe.map(s => SHAPE_LABEL[s.userData.rs.shape] + s.userData.rs.size).join("・")}</span>`;
+      b.addEventListener("click", () => placeCore(p.key));
+      corePicks.appendChild(b);
+    }
+  }
+}).catch(err => { console.error(err); });
+
+// ============ テスト部屋 ============
+// 部屋：1m ごとの床タイルと、高さの目盛りが入った壁。正面（+z）に矢印
+const room = new THREE.Group(); room.visible = false; scene.add(room);
+const ROOM_W = 10, ROOM_D = 12;
+function gridTex(w, h, label) {
+  const c = document.createElement("canvas"); c.width = w * 64; c.height = h * 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#2a2e33"; g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = "#3d434a"; g.lineWidth = 2;
+  for (let i = 0; i <= w * 2; i++) { g.globalAlpha = i % 2 ? 0.45 : 1; g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, c.height); g.stroke(); }
+  for (let j = 0; j <= h * 2; j++) { g.globalAlpha = j % 2 ? 0.45 : 1; g.beginPath(); g.moveTo(0, j * 32); g.lineTo(c.width, j * 32); g.stroke(); }
+  g.globalAlpha = 1;
+  if (label) {  // 壁：下から 1m ごとの目盛り
+    g.fillStyle = "#9aa1a9"; g.font = "bold 22px 'BIZ UDPGothic', sans-serif";
+    for (let j = 1; j < h; j++) g.fillText(`${j}m`, 8, c.height - j * 64 - 6);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+{
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_D),
+    new THREE.MeshStandardMaterial({ map: gridTex(ROOM_W, ROOM_D), roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2; room.add(floor);
+  const wallMat = new THREE.MeshStandardMaterial({ map: gridTex(ROOM_W, 5, true), roughness: 0.9, side: THREE.DoubleSide });
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, 5), wallMat);
+  back.position.set(0, 2.5, -ROOM_D / 2); room.add(back);
+  const sideMat = new THREE.MeshStandardMaterial({ map: gridTex(ROOM_D, 5, true), roughness: 0.9, side: THREE.DoubleSide });
+  const left = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_D, 5), sideMat);
+  left.rotation.y = Math.PI / 2; left.position.set(-ROOM_W / 2, 2.5, 0); room.add(left);
+  // 正面の矢印（ロボットの正面＝+z）
+  const ar = new THREE.Shape();
+  ar.moveTo(-0.18, 0); ar.lineTo(0.18, 0); ar.lineTo(0.18, 0.5); ar.lineTo(0.38, 0.5); ar.lineTo(0, 0.95); ar.lineTo(-0.38, 0.5); ar.lineTo(-0.18, 0.5); ar.closePath();
+  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(ar), new THREE.MeshBasicMaterial({ color: 0x7fd49a, transparent: true, opacity: 0.6 }));
+  arrow.rotation.x = -Math.PI / 2; arrow.position.set(ROOM_W / 2 - 1.2, 0.01, ROOM_D / 2 - 2.2); room.add(arrow);
+  room.userData.arrow = arrow;
+}
+let testMode = false;
+// 部屋全体が見えるカメラ（ロボットが歩き回っても画面から出ない）
+function frameRoom() {
+  _box.setFromObject(buildGroup);
+  const h = _box.isEmpty() ? 2 : _box.max.y - _box.min.y;
+  controls.target.set(0, room.position.y + Math.max(1.0, h * 0.5), 0);
+  camera.position.copy(controls.target).add(new THREE.Vector3(6.5, 3.0 + h * 0.5, 11.5).multiplyScalar(Math.min(1.5, Math.max(0.9, h / 3))));
+}
+
+// --- 動作テスト：決まり（つながっている場所・関節の範囲）だけから動きを作る ---
+const AXIS_ROT = { X: ["x", 1], Y: ["z", -1], Z: ["y", 1] };   // Blender の軸 → three の軸（向き）
+let autoMove = null;   // { joints:[...], core, legs, t }
+const _v = new THREE.Vector3(), _q = new THREE.Quaternion();
+function jrange(u) {
+  return [u.rs_joint_free_min ?? u.rs_joint_min ?? 0, u.rs_joint_free_max ?? u.rs_joint_max ?? 0];
+}
+function isWheel(o) { return /Wheel/.test(o.name) || !!o.userData.rs_wheel_r; }
+function planAutoMotion() {
+  const core = insts.find(i => !i.target);
+  if (!core) return null;
+  buildGroup.updateMatrixWorld(true);
+  const cRoot = core.root, cInv = cRoot.matrixWorld.clone().invert();
+  const cQinv = cRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const joints = [];
+  cRoot.traverse(o => {
+    const u = o.userData;
+    if (!u.rs_joint_type) return;
+    // コアのどの接続口から伸びた枝か
+    let p = o, sock = null;
+    const anc = [];
+    while (p && p !== cRoot) {
+      // 一番近い「コアの接続口」から伸びた枝として扱う（コアをつないだ胴の、うしろのコアの脚も脚になる）。
+      // 根元からの順番（k）も、その接続口より先の関節だけで数える（背骨の関節は数えない）
+      const ri = p.userData.rs && p.userData.rs.inst;
+      if (!sock && ri && ri.own !== p && templates[ri.key] && templates[ri.key].kind === "core") sock = p;
+      if (!sock && p !== o && p.userData.rs_joint_type === "HINGE" && !isWheel(p)) anc.unshift(p);
+      p = p.parent;
+    }
+    let role = "tool";
+    if (sock) {
+      const n = new THREE.Vector3(0, 1, 0).applyQuaternion(sock.getWorldQuaternion(_q)).applyQuaternion(cQinv);
+      role = n.y < -0.7 ? "leg" : n.y > 0.7 ? "top" : Math.abs(n.x) > 0.7 ? "arm" : "tool";
+    }
+    // 先にまた別のコアがつながっている関節は「背骨」：胴が折れないよう、ほとんど動かさない
+    let carriesCore = false;
+    o.traverse(x => { const xi = x.userData.inst; if (xi && xi.root === x && templates[xi.key] && templates[xi.key].kind === "core") carriesCore = true; });
+    if (carriesCore) role = "spine";
+    const x = o.getWorldPosition(_v).applyMatrix4(cInv).x;
+    const [ax, sg] = AXIS_ROT[u.rs_joint_axis || "X"];
+    joints.push({ o, u, role, anc, side: x >= 0 ? 0 : Math.PI, ax, sg,
+      wheel: isWheel(o), base: u.rs_joint_type === "SLIDE" ? o.position[ax] : o.rotation[ax] });
+  });
+  // 脚ごとの部品：どの部品がどの脚（付け根の関節）に属するか。脚どうしの当たりに使う
+  const legOf = new Map();
+  for (const j of joints) {
+    if (j.role !== "leg" || j.wheel) continue;
+    const rootJ = j.anc.length ? j.anc[0] : j.o;
+    j.o.traverse(x => { const xi = x.userData.inst; if (xi && xi.root === x) legOf.set(xi, rootJ); });
+  }
+  const legs = joints.some(j => j.role === "leg" && j.u.rs_joint_type === "HINGE" && !j.wheel);
+  const rolls = joints.some(j => j.wheel) || insts.some(i => i.tracks.length || i.wheels.length);
+  for (const j of joints) j.k = j.anc.length;
+  // 脚が前後に何組もあるとき（四つ足・六本脚）の歩き方。前から順の「組」と左右で、脚ごとのずれ（位相）を決める
+  //   trot：対角の脚が一緒（前後の組で半歩ずらす）／pace：同じ側の脚が一緒／wave：後ろから前へ1本ずつ順に出す
+  const roots = joints.filter(j => j.role === "leg" && j.k === 0 && !j.wheel);
+  const gait = (planAutoMotion.gait || "trot");
+  if (roots.length > 2) {
+    const zs = roots.map(j => j.o.getWorldPosition(_v).applyMatrix4(cInv).z);
+    const sorted = [...new Set(zs.map(z => Math.round(z * 4) / 4))].sort((a, b) => b - a);   // 前から順の組
+    roots.forEach((j, i) => { j.pair = sorted.indexOf(Math.round(zs[i] * 4) / 4); });
+    const nPair = sorted.length;
+    for (const j of joints) {
+      if (j.role !== "leg") continue;
+      let r = j; while (r && r.k > 0) r = joints.find(x => x.o === r.anc[0]);
+      if (!r) continue;
+      const left = r.side > 1;   // 左右（side は 0 か π）
+      if (gait === "trot") { if (r.pair % 2 === 1) j.side += Math.PI; }
+      else if (gait === "pace") { /* 同じ側はそろえる：組によるずれなし */ }
+      else if (gait === "wave") { j.side = (left ? Math.PI : 0) + (nPair - 1 - r.pair) * (Math.PI / nPair); }
+    }
+  }
+  planAutoMotion.usedGait = roots.length > 2 ? gait : null;
+  // 向きを確かめる：少しだけ回してみて、どちらに回すと「前（コアの +z）」へ動くかを調べる
+  const F = new THREE.Vector3(0, 0, 1).applyQuaternion(cRoot.getWorldQuaternion(new THREE.Quaternion()));
+  const meshesUnder = o => { const a = []; o.traverse(x => { if (x.isMesh && !x.userData.isMark) a.push(x); }); return a; };
+  for (const j of joints) {
+    if (j.u.rs_joint_type !== "HINGE") continue;
+    const ms = meshesUnder(j.o);
+    if (!ms.length) continue;
+    if (j.wheel) {
+      // 車輪：床に触れる一番下の点が「後ろ」へ動く向きに回す（そうすると体は前へ進む）
+      buildGroup.updateMatrixWorld(true);
+      let low = null, lowY = Infinity, lm = null;
+      for (const m of ms) for (const q of surfacePoints(m.geometry)) { const w = q.clone().applyMatrix4(m.matrixWorld); if (w.y < lowY) { lowY = w.y; low = q; lm = m; } }
+      const before = low.clone().applyMatrix4(lm.matrixWorld);
+      j.o.rotation[j.ax] = j.base + 0.05; buildGroup.updateMatrixWorld(true);
+      const after = low.clone().applyMatrix4(lm.matrixWorld);
+      j.o.rotation[j.ax] = j.base;
+      j.spin = after.sub(before).dot(F) < 0 ? 1 : -1;
+    } else if (j.k <= 1 && (j.role === "leg" || j.role === "arm")) {
+      // 付け根：「前へ振る」と先が前へ動く向き。ひざ：「曲げる」と足が後ろへ動く向き。肘：「曲げる」と手が前へ動く向き。
+      // 関節の範囲（大きく回せる側）ではなく、少し回して先がどちらへ動くかで決める（パーツの作りが違っても向きを間違えない・11/10）
+      buildGroup.updateMatrixWorld(true);
+      const c0 = new THREE.Vector3(); for (const m of ms) c0.add(m.getWorldPosition(new THREE.Vector3()));
+      j.o.rotation[j.ax] = j.base + j.sg * THREE.MathUtils.degToRad(5); buildGroup.updateMatrixWorld(true);
+      const c1 = new THREE.Vector3(); for (const m of ms) c1.add(m.getWorldPosition(new THREE.Vector3()));
+      j.o.rotation[j.ax] = j.base;
+      const fwdMove = c1.sub(c0).dot(F) > 0;
+      j.cal = (j.k === 1 && j.role === "leg") ? (fwdMove ? -1 : 1) : (fwdMove ? 1 : -1);
+    } else if (j.k >= 2 && j.role === "leg") {
+      // 足首：どちらに回すと「つま先（一番前の点）が下がる」かを確かめる（けり出しでかかとを上げる向き）
+      buildGroup.updateMatrixWorld(true);
+      let toe = null, toeD = -Infinity, tm = null;
+      for (const m of ms) for (const q of surfacePoints(m.geometry)) { const w = q.clone().applyMatrix4(m.matrixWorld); const d = w.dot(F); if (d > toeD) { toeD = d; toe = q; tm = m; } }
+      const y0 = toe.clone().applyMatrix4(tm.matrixWorld).y;
+      j.o.rotation[j.ax] = j.base + j.sg * THREE.MathUtils.degToRad(5); buildGroup.updateMatrixWorld(true);
+      const y1 = toe.clone().applyMatrix4(tm.matrixWorld).y;
+      j.o.rotation[j.ax] = j.base;
+      j.toe = y1 < y0 ? 1 : -1;
+    }
+  }
+  buildGroup.updateMatrixWorld(true);
+  const byObj = new Map(joints.map(j => [j.o, j]));
+  for (const j of joints) j.ancJ = j.anc.map(a => byObj.get(a));
+  // 脚の長さ（付け根の関節から足の裏まで）→ 歩幅・周期・振り幅
+  let gp = null;
+  const legRoots = joints.filter(j => j.role === "leg" && j.k === 0 && !j.wheel && j.u.rs_joint_type === "HINGE");
+  if (legRoots.length) {
+    let Lsum = 0, n = 0;
+    for (const j of legRoots) {
+      const hipY = j.o.getWorldPosition(new THREE.Vector3()).y;
+      let low = Infinity;
+      for (const m of meshesUnder(j.o)) for (const q of surfacePoints(m.geometry)) { const y = q.clone().applyMatrix4(m.matrixWorld).y; if (y < low) low = y; }
+      if (low < Infinity && hipY - low > 0.05) { Lsum += hipY - low; n++; }
+    }
+    const Fr = parseFloat((document.getElementById("testSpeed") || {}).value) || 0.15;   // 既定「ふつう」は 0.15（人の普通の歩き）
+    if (n) gp = gaitParams(Lsum / n, Fr);
+  }
+  for (const j of joints) if (j.role === "leg") j.gp = gp;
+  hingeDeg.gp = gp;
+  return { joints, core: cRoot, baseY: cRoot.position.y, legs, rolls, t: 0, floorY: room.position.y, legOf, legInsts: new Set(legOf.keys()), bumps: 0, gp };
+}
+// 形の表面から点を拾っておく（足の接地と当たり判定に使う）。面積に応じて約 5cm 間隔
+const _sampleCache = new WeakMap();
+function surfacePoints(geo) {
+  if (_sampleCache.has(geo)) return _sampleCache.get(geo);
+  const pos = geo.attributes.position, idx = geo.index;
+  const tri = idx ? idx.count / 3 : pos.count / 3;
+  const pts = [], a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const stride = Math.max(1, Math.floor(tri / 1500));   // 面が多い形は間引く
+  for (let t = 0; t < tri; t += stride) {
+    const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    const area = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).length() / 2 * stride;
+    const n = Math.min(40, 1 + Math.floor(area / 0.0025));
+    for (let k = 0; k < n; k++) {
+      let u = Math.random(), v = Math.random();
+      if (u + v > 1) { u = 1 - u; v = 1 - v; }
+      pts.push(a.clone().multiplyScalar(1 - u - v).add(b.clone().multiplyScalar(u)).add(c.clone().multiplyScalar(v)));
+    }
+    pts.push(a.clone());
+  }
+  _sampleCache.set(geo, pts);
+  return pts;
+}
+// パーツごとの形（子パーツ・接続口の印は含めない）
+function partMeshes(inst) {
+  const out = [];
+  inst.root.traverse(o => { if (o.isMesh && !o.userData.isMark && o.userData.inst === inst) out.push(o); });
+  return out;
+}
+// 一番下の点の高さ（足の接地）
+function lowestY() {
+  buildGroup.updateMatrixWorld(true);
+  let m = Infinity;
+  const p = new THREE.Vector3();
+  for (const inst of insts) for (const o of partMeshes(inst)) {
+    const pts = surfacePoints(o.geometry);
+    for (let i = 0; i < pts.length; i += 3) { p.copy(pts[i]).applyMatrix4(o.matrixWorld); if (p.y < m) m = p.y; }
+  }
+  return m;
+}
+// 当たり判定：表面の点を 6cm の升目に入れ、つながっていないパーツどうしが同じ升目を 4 つ以上使っていたら「重なり」
+const CELL = 0.06;
+function findOverlaps(subset = null, stride = 1, minCells = 4) {
+  buildGroup.updateMatrixWorld(true);
+  const owner = new Map();   // 升目 → Set(パーツ番号)
+  const p = new THREE.Vector3();
+  // 升目はロボット自身の座標で切る（体が落ちたり傾いたりして世界の位置が変わっても、同じ組み方なら同じ答えになるように。
+  // 前は世界の座標で切っていたので、組んだ直後（40cm 上）と落ちたあとで「触れそうな2つ」の判定が変わり、置くときのよけ判定をすり抜けることがあった・11/10）
+  const toLocal = buildGroup.matrixWorld.clone().invert();
+  insts.forEach((inst, n) => {
+    if (subset && !subset.has(inst)) return;
+    for (const o of partMeshes(inst)) { const pts = surfacePoints(o.geometry); for (let i = 0; i < pts.length; i += stride) { const q = pts[i];
+      p.copy(q).applyMatrix4(o.matrixWorld).applyMatrix4(toLocal);
+      const k = `${Math.floor(p.x / CELL)},${Math.floor(p.y / CELL)},${Math.floor(p.z / CELL)}`;
+      let s = owner.get(k); if (!s) owner.set(k, s = new Set()); s.add(n);
+    } }
+  });
+  const near = (a, b) => (a.target && a.target.userData.rs.inst === b) || (b.target && b.target.userData.rs.inst === a);
+  const count = new Map();
+  for (const s of owner.values()) {
+    if (s.size < 2) continue;
+    const arr = [...s];
+    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+      const k = arr[i] + "-" + arr[j]; count.set(k, (count.get(k) || 0) + 1);
+    }
+  }
+  const out = [];
+  for (const [k, c] of count) {
+    if (c < Math.max(2, Math.round(minCells / stride))) continue;
+    const [i, j] = k.split("-").map(Number), a = insts[i], b = insts[j];
+    if (near(a, b)) continue;   // つないだ相手とは関節の所で触れていてよい
+    out.push({ a, b, cells: c });
+  }
+  return out.sort((x, y) => y.cells - x.cells);
+}
+// 止まった姿勢と、動作中の 4 つの姿勢で重なりを調べる
+function checkOverlaps(plan) {
+  const found = new Map();
+  const phases = plan && plan.joints.length ? [null, 0.25, 0.5, 0.75, 1.0] : [null];
+  for (const ph of phases) {
+    if (ph !== null) poseAt(plan, ph * Math.PI * 2);
+    for (const o of findOverlaps()) {
+      const k = o.a.label + "／" + o.b.label;
+      if (!found.has(k) || (found.get(k).still === false && ph === null)) found.set(k, { ...o, still: ph === null });
+    }
+  }
+  if (plan) poseAt(plan, null);
+  return [...found.values()];
+}
+// 動作中に重なるときは、その重なりに関わる関節の振れ幅を半分にして調べ直す（最大4回）
+function tunePlan(plan) {
+  if (!plan) return plan;
+  const under = (j, obj) => { for (let p = obj; p; p = p.parent) if (p === j) return true; return false; };
+  let ov = checkOverlaps(plan);
+  plan.tuned = 0;
+  for (let it = 0; it < 4; it++) {
+    // 脚どうしの当たりは、動かしながら「ぶつかったら止まる」で扱うので、ここでは振れ幅を小さくしない
+    const moving = ov.filter(o => !o.still && !(plan.legOf.has(o.a) && plan.legOf.has(o.b) && plan.legOf.get(o.a) !== plan.legOf.get(o.b)));
+    if (!moving.length) break;
+    for (const j of plan.joints) {
+      if (j.wheel) continue;
+      if (moving.some(o => under(j.o, o.a.root) || under(j.o, o.b.root) || j.o.userData.inst === o.a || j.o.userData.inst === o.b)) {
+        j.amp = (j.amp ?? 1) * 0.5; plan.tuned++;
+      }
+    }
+    ov = checkOverlaps(plan);
+  }
+  plan.overlaps = ov.filter(o => o.still || !(plan.legOf.has(o.a) && plan.legOf.has(o.b) && plan.legOf.get(o.a) !== plan.legOf.get(o.b)));
+  return plan;
+}
+function poseAt(plan, tt) {
+  for (const j of plan.joints) {
+    if (tt === null) { if (j.u.rs_joint_type === "SLIDE") j.o.position[j.ax] = j.base; else j.o.rotation[j.ax] = j.base; continue; }
+    if (j.wheel) continue;
+    if (j.u.rs_joint_type === "SLIDE") {
+      const [lo, hi] = jrange(j.u);
+      j.o.position[j.ax] = j.base + j.sg * (lo + (hi - lo) * (0.5 + 0.5 * Math.sin(tt + j.side)));
+    } else j.o.rotation[j.ax] = j.base + j.sg * THREE.MathUtils.degToRad(hingeDeg(j, tt, plan.legs));
+  }
+}
+// ひざの曲げ方：足を前へ出すあいだ（付け根が後ろ→前へ振れるあいだ）だけ曲げる。
+//   曲げるのは「出し始め」を一番深くして、前へ出し終わるころにはほぼ伸びている（人の歩きと同じ。かかとが上がってから足が前へ出る）。
+//   前は真ん中で一番深く曲げていたので、太ももが前へ振れているのに足先が後ろへ残り、「足を後ろへ蹴っている」ように見えた
+// 1周期の中の「足を前へ出すあいだ」と「床をけるあいだ」の割合（デューティ比 d＝床に付いている割合）。
+//   s は 0→1 が前へ出すあいだ、1→2 が床をけるあいだ。d=0.5 なら前と同じ半分ずつ。歩きは d≈0.6〜0.65（両足が床に付く時間がある）
+function stepPhase(ph, d = 0.5) {
+  const u = ((ph + Math.PI / 2) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI);   // 0 が足の後ろの端（出し始め）
+  const w = 1 - d;
+  return u < w ? u / w : 1 + (u - w) / d;
+}
+// 付け根の振り：前へ出すあいだはなめらかに −1→+1、床をけるあいだは一定の速さで +1→−1（床に付いた足が一定の速さで後ろへ動く＝体が一定の速さで進む）
+function hipSwing(ph, d = 0.5) {
+  const s = stepPhase(ph, d);
+  return s < 1 ? -Math.cos(Math.PI * s) : 1 - 2 * (s - 1);
+}
+function kneeLift(ph, d = 0.5) {
+  const s = stepPhase(ph, d);
+  if (s >= 1) return 0;
+  return Math.min(1, Math.sin(Math.PI * s) * Math.pow(1 - s, 0.7) / 0.66);   // s≈0.35 で 1（一番深い）、s=0.8 で 0.3
+}
+// ひざの「床に付いているあいだ」の曲げ（人の歩行計測より・11/10 調査）：
+//   着地直後（荷重応答）に 15 度ほど沈む（体重が乗った感じ＝アニメの「ダウン」の姿勢）、けり終わり（前遊脚期）に 35 度まで曲げてから足を出す。
+//   出し始めの 35 度はそのまま遊脚のひざ曲げにつながる（段差なし）
+function kneeStanceDeg(ph, d = 0.5) {
+  const s = stepPhase(ph, d);
+  if (s < 1) return s < 0.3 ? 35 * (1 - s / 0.3) : 0;            // 出し始め：35 度から遊脚の曲げへ受け渡す
+  if (s < 1.3) return 15 * Math.sin(Math.PI * (s - 1) / 0.3);    // 着地直後：15 度沈む
+  if (s >= 1.85) return 35 * (s - 1.85) / 0.15;                  // けり終わり：35 度まで曲げる
+  return 0;
+}
+// 足首のけり出し：床をけっている脚は、終わりぎわにかかとを上げてつま先で立つ（人のけり出しと同じ）。
+//   こうすると、けっている脚が「長く」なって、前へ出し終わる脚が床に着く瞬間まで、けっている脚のつま先が一番低い点のまま体を支える。
+//   これがないと、前へ出した脚がまだ前へ動いているうちに床に着いて体を支えてしまい、体が後ろへ引き戻されてガクつく（11/09 夜・本人指摘「進むのが足に合ってない」）
+function toeOff(ph, d = 0.5) {
+  const s = stepPhase(ph, d);
+  if (s >= 1.5) return (s - 1.5) / 0.5;          // けりの後半でだんだんかかとを上げる（着地の瞬間が一番高い）
+  if (s < 0.15) return 1 - s / 0.15;              // 出し始めですぐ戻す
+  return 0;
+}
+function hingeDeg(j, tt, legs) {
+  const [lo, hi] = jrange(j.u);
+  const fwd = j.cal ?? (Math.abs(lo) >= Math.abs(hi) ? -1 : 1);     // 付け根は確かめた向き、ほかは大きく回せる側を「前」
+  const big = Math.max(Math.abs(lo), Math.abs(hi)), small = Math.min(Math.abs(lo), Math.abs(hi));
+  const ph = tt + j.side;
+  let d = 0;
+  if (j.role === "leg") {
+    // 振り幅・デューティ比は脚の長さと速さから決める（gaitParams）。脚の長さが分からないときは前の固定値（16度・30度・半分ずつ）
+    const gp = j.gp || { A: 16, duty: 0.5 };
+    // 付け根：前へ 1.3A・後ろへ 0.7A（人は屈曲 +30 度・伸展 −10 度で、中心が前に寄っている。11/10 調査）。右脚は 5% 小さく（左右そろいすぎを避ける）。
+    // ひざ：遊脚の山（最大 60 度）＋床に付いているあいだの沈み・けり曲げ
+    if (j.k === 0) { const A = Math.min(gp.A, big * 0.8, Math.max(small, 8)) * (j.side > 1 ? 0.95 : 1); d = fwd * (A * hipSwing(ph, gp.duty) + A * 0.3); }
+    else if (j.k === 1) d = fwd * Math.min(big * 0.8, Math.max(Math.min(gp.A * 2.2, 60) * kneeLift(ph, gp.duty), kneeStanceDeg(ph, gp.duty)));
+    else d = -((j.ancJ[0] ? hingeDeg(j.ancJ[0], tt, legs) : 0) + (j.ancJ[1] ? hingeDeg(j.ancJ[1], tt, legs) : 0))
+             + (j.toe || 0) * Math.min(20, big * 0.5) * toeOff(ph, gp.duty);   // 足首：足の裏を床と平行に保ち、けり出しでつま先立ち
+  } else if (j.role === "arm") {
+    // 腕は同じ側の脚と逆に振る（人は肩 ±20〜30 度、肘 20〜40 度）。脚の振り幅に合わせて大きくする
+    const gA = (hingeDeg.gp && hingeDeg.gp.A) || 16;
+    const a = Math.min(big * 0.6, Math.max(20, gA * 0.9));
+    const lag = 0.15;   // 腕は脚より少し遅れて動く（追従。2コマほど）
+    if (j.k === 0) d = legs ? fwd * a * Math.sin(ph + Math.PI - lag) : fwd * a * (0.6 + 0.4 * Math.sin(ph));
+    else if (j.k === 1) d = legs ? fwd * Math.min(big * 0.6, 28 + 14 * Math.sin(ph + Math.PI - lag * 2)) : fwd * Math.min(big * 0.6, 20 + 12 * Math.sin(ph));   // 肘：前へ振るとき深く曲がる。肩よりさらに遅れる
+    else d = fwd * Math.min(big * 0.5, 12) * Math.sin(ph + 1);
+  } else if (j.role === "spine") {
+    d = 0;   // 背骨は動かさない（背骨が何本もつながると、小さなしなりでも積み重なって尻が持ち上がり、後ろの脚が浮いた）
+  } else if (j.role === "top" && legs && j.k === 0) {
+    d = fwd * Math.min(big * 0.3, 3) * Math.sin(2 * tt + Math.PI / 2);   // 頭：歩きに合わせて1歩ごとに小さくうなずく（大きく揺れない）
+  } else {
+    d = fwd * big * 0.35 * (0.5 + 0.5 * Math.sin(tt * 0.5 + j.k * 0.9));
+  }
+  return Math.max(lo, Math.min(hi, d * (j.amp ?? 1)));
+}
+const CYCLE = 1.4;        // 1歩の周期（秒）。脚の長さが分かるときは gaitParams の周期を使う（脚が長いほどゆっくり）
+const G_ACC = 9.8;
+// 脚の長さ L と「速さの度合い」Fr（フルード数＝v²/(gL)。0.15 ふつうの歩き、0.5 で小走り、人は 0.5〜0.6 で走りに変わる）から歩き方を決める。
+//   歩幅 λ = L × 2.3 × Fr^0.3（Alexander の式）、速さ v = √(Fr g L)、周期 T = λ / v、床に付いている割合 d ≈ 0.67 − 0.13 Fr、
+//   付け根の振り幅 A = asin(d λ / 2L)（床をけるあいだに足が d λ だけ後ろへ動く）。脚が長いほど歩幅が大きく、周期が長い
+function gaitParams(L, Fr) {
+  if (!(L > 0.05)) return null;
+  const lam = L * 2.3 * Math.pow(Fr, 0.3), v = Math.sqrt(Fr * G_ACC * L), T = lam / v;
+  const duty = Math.min(0.75, Math.max(0.5, 0.67 - 0.13 * Fr));
+  const A = THREE.MathUtils.radToDeg(Math.asin(Math.min(0.9, duty * lam / (2 * L))));
+  return { L, Fr, lam, v, T, duty, A };
+}
+const WHEEL_TURN = 2.5;   // 車輪が1回転する秒数
+function updateAutoMove(dt) {
+  if (!autoMove) return;
+  autoMove.t += dt;
+  const tt = autoMove.t / (autoMove.gp ? autoMove.gp.T : CYCLE) * Math.PI * 2;
+  for (const j of autoMove.joints) {
+    if (j.wheel) { j.o.rotation[j.ax] = j.base + (j.spin ?? -j.sg) * autoMove.t / WHEEL_TURN * Math.PI * 2; continue; }
+    if (j.u.rs_joint_type === "SLIDE") {
+      const [lo, hi] = jrange(j.u);
+      j.o.position[j.ax] = j.base + j.sg * (lo + (hi - lo) * (0.5 + 0.5 * Math.sin(tt + j.side))); continue;
+    }
+    j.prev = j.o.rotation[j.ax];
+    j.o.rotation[j.ax] = j.base + j.sg * THREE.MathUtils.degToRad(hingeDeg(j, tt, autoMove.legs));
+  }
+  legContact(autoMove);
+}
+// 脚どうしの当たり：別の脚とぶつかったら、その2本の脚の関節を1コマ前の角度に戻して止める（すり抜けない）。
+// 次のコマで目標が離れていれば、また動き出す
+function legContact(plan) {
+  if (plan.legInsts.size < 2) return;
+  for (let it = 0; it < 2; it++) {
+    const ov = findOverlaps(plan.legInsts, 3).filter(o => plan.legOf.get(o.a) !== plan.legOf.get(o.b));
+    if (!ov.length) return;
+    const hold = new Set();
+    for (const o of ov) { hold.add(plan.legOf.get(o.a)); hold.add(plan.legOf.get(o.b)); }
+    for (const j of plan.joints) {
+      const rootJ = j.anc.length ? j.anc[0] : j.o;
+      if (j.role === "leg" && !j.wheel && hold.has(rootJ) && j.prev !== undefined) j.o.rotation[j.ax] = j.prev;
+    }
+    plan.bumps++;
+  }
+}
+
+// ============ 重力 ============
+// ロボット全体を1つのかたまりとして扱う（関節はアニメーションで動かし、全体の位置と傾きは重力で決まる）。
+//   ・浮いていれば落ちる
+//   ・床に触れている点の囲み（支える面）から重心が外へ出たら、その縁を軸に倒れる
+//   ・床に触れている点はすべらない（足で床をけると体が進む。車輪は回ると進む）
+//   ・キャタピラは表面の模様が流れるだけなので、向いている方へ進ませる
+const G = 9.8, CONTACT = 0.03;
+let phys = null;
+function physSig() { return insts.map(i => i.key + (i.target ? i.target.uuid : "")).join(","); }
+function physInit() {
+  const items = []; let n = 0;
+  for (const inst of insts) for (const o of partMeshes(inst)) {
+    const pts = surfacePoints(o.geometry).filter((_, i) => i % 2 === 0);
+    items.push({ o, pts, off: n }); n += pts.length;
+  }
+  phys = { sig: physSig(), items, n, W: new Float32Array(n * 3), age: new Uint16Array(n), prev: null, vy: 0, w: 0, fallen: false, floor: room.position.y, stand: true };
+}
+function physPoints() {
+  buildGroup.updateMatrixWorld(true);
+  const v = new THREE.Vector3(), W = phys.W;
+  for (const it of phys.items) {
+    const m = it.o.matrixWorld;
+    for (let i = 0; i < it.pts.length; i++) { v.copy(it.pts[i]).applyMatrix4(m); const k = (it.off + i) * 3; W[k] = v.x; W[k + 1] = v.y; W[k + 2] = v.z; }
+  }
+}
+function shiftAll(dx, dy, dz) {
+  buildGroup.position.x += dx; buildGroup.position.y += dy; buildGroup.position.z += dz;
+  const W = phys.W; for (let k = 0; k < W.length; k += 3) { W[k] += dx; W[k + 1] += dy; W[k + 2] += dz; }
+}
+function hull2d(P) {   // [x,z] の凸包（反時計回り）
+  if (P.length < 3) return P.slice();
+  P = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function nearestOnHull(H, c) {   // 囲みの中なら null、外なら一番近い縁の点
+  const segN = (a, b) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz;
+    const t = L > 0 ? Math.max(0, Math.min(1, ((c[0] - a[0]) * dx + (c[1] - a[1]) * dz) / L)) : 0;
+    return [a[0] + dx * t, a[1] + dz * t];
+  };
+  if (H.length === 1) return H[0];
+  if (H.length === 2) return segN(H[0], H[1]);
+  let inside = true;
+  for (let i = 0; i < H.length; i++) {
+    const a = H[i], b = H[(i + 1) % H.length];
+    if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < -1e-4) { inside = false; break; }
+  }
+  if (inside) return null;
+  let best = null, bd = Infinity;
+  for (let i = 0; i < H.length; i++) {
+    const q = segN(H[i], H[(i + 1) % H.length]), d = (q[0] - c[0]) ** 2 + (q[1] - c[1]) ** 2;
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+function physStep(dt) {
+  const W = phys.W, n = phys.n, floor = phys.floor;
+  physPoints();
+  // 1. 床に触れていた点はすべらない → その分だけ体を動かす（足でけって進む・車輪で進む）
+  if (phys.prev && phys.prev.idx.length && document.getElementById("testWalk").checked) {
+    let dx = 0, dz = 0, m = 0;
+    const { idx, xz, ys } = phys.prev;
+    for (let i = 0; i < idx.length; i++) {
+      if (W[idx[i] * 3 + 1] > ys[i] + 0.002) continue;   // 持ち上がり始めた点（上げている足）は数えない
+      // 床にぴったり付いている点ほど重く見る（体重が乗っている足）。着きかけの足（床から 1〜3cm）は軽く見る。
+      // こうしないと、前へ出し終わる直前の足が床をかすめた瞬間に「前へ動く点」として数えられ、体が後ろへ引き戻されてガクつく
+      // さらに、長く床に付いている点ほど重く見る（着いたばかりの足にはまだ体重が乗っていない）。
+      // 前へ出し終わる直前の足は、床をけっている足と同じ高さになる瞬間があるので、高さだけでは区別できない
+      const w = Math.max(0, 1 - (ys[i] - floor) / CONTACT) ** 2 * Math.min(1, phys.age[idx[i]] / 12);
+      if (w <= 0) continue;
+      dx += (W[idx[i] * 3] - xz[i * 2]) * w; dz += (W[idx[i] * 3 + 2] - xz[i * 2 + 1]) * w; m += w;
+    }
+    if (m > 0) { dx /= m; dz /= m; if (Math.hypot(dx, dz) < 0.2) shiftAll(-dx, 0, -dz); }
+  }
+  // 2. 落ちる
+  let low = Infinity;
+  for (let k = 1; k < W.length; k += 3) if (W[k] < low) low = W[k];
+  // 手付けの動きの「浮く高さ」（ジャンプ）：その高さに体を持ち上げる。空中では床の点はなし
+  if (jsonMove && jsonMove.jump > 0.001) {
+    shiftAll(0, floor + jsonMove.jump - low, 0);
+    phys.vy = 0; phys.prev = null; phys.age.fill(0);
+    return;
+  }
+  if (low > floor + CONTACT) {
+    phys.vy -= G * dt;
+    let dy = phys.vy * dt;
+    if (low + dy < floor) { dy = floor - low; phys.vy = 0; }
+    shiftAll(0, dy, 0);
+    phys.prev = null; phys.age.fill(0);
+    return;
+  }
+  phys.vy = 0;
+  if (low < floor) shiftAll(0, floor - low, 0);
+  // 3. 支える面と重心
+  const C = [], idx = [];
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < n; i++) {
+    const k = i * 3; cx += W[k]; cy += W[k + 1]; cz += W[k + 2];
+    if (W[k + 1] < floor + CONTACT) { C.push([W[k], W[k + 2]]); idx.push(i); }
+  }
+  cx /= n; cy /= n; cz /= n;
+  const H = hull2d(C), q = nearestOnHull(H, [cx, cz]);
+  // 踏ん張り：歩いている脚つきロボットは、重心が支える面から「脚の長さの 30%」までしか出ていなければ、体を起こして持ちこたえる
+  //   （本物の二足歩行ロボットがやっている ZMP／キャプチャーポイントのバランス制御のつもり。片足で立つあいだの横ゆれで倒れないため。
+  //    それより外へ出たら、今までどおり縁を軸に倒れる）
+  const balance = phys.fallen ? 0 : (autoMove && autoMove.legs && autoMove.gp) ? autoMove.gp.L * 0.3 : (jsonMove && jsonMove.legL ? jsonMove.legL * 0.3 : 0);
+  const dOut = q ? Math.hypot(cx - q[0], cz - q[1]) : 0;
+  if (!q) { phys.w = 0; phys.stand = true; }
+  else if (dOut < balance) {
+    phys.w = Math.max(0, phys.w - 3 * dt); phys.stand = true;
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(buildGroup.quaternion);
+    const ang = Math.acos(Math.min(1, up.y));
+    if (ang > 1e-3) {
+      const axis = up.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+      const piv = new THREE.Vector3(q[0], floor, q[1]);
+      const qq = new THREE.Quaternion().setFromAxisAngle(axis, Math.min(ang, 1.5 * dt));
+      buildGroup.position.sub(piv).applyQuaternion(qq).add(piv);
+      buildGroup.quaternion.premultiply(qq);
+    }
+  }
+  else {
+    // 縁を軸に倒れる（重心が縁から離れているほど速く）
+    const piv = new THREE.Vector3(q[0], floor, q[1]);
+    const dir = new THREE.Vector3(cx - q[0], 0, cz - q[1]); const d = dir.length(); dir.normalize();
+    const r2 = d * d + (cy - floor) ** 2 + 1e-4;
+    phys.w = phys.w * 0.995 + G * d / (r2 * 1.4) * dt;
+    const axis = new THREE.Vector3(0, 1, 0).cross(dir).normalize();
+    const qq = new THREE.Quaternion().setFromAxisAngle(axis, phys.w * dt);
+    buildGroup.position.sub(piv).applyQuaternion(qq).add(piv);
+    buildGroup.quaternion.premultiply(qq);
+    phys.stand = false;
+  }
+  // 4. 床に触れている点を覚える（次のコマで、すべらないようにする）
+  physPoints();
+  const xz = new Float32Array(idx.length * 2), ys = new Float32Array(idx.length);
+  const idx2 = [];
+  const touching = new Uint8Array(n);
+  for (let i = 0; i < idx.length; i++) { const k = idx[i] * 3; if (W[k + 1] < floor + CONTACT) { xz[idx2.length * 2] = W[k]; xz[idx2.length * 2 + 1] = W[k + 2]; ys[idx2.length] = W[k + 1]; idx2.push(idx[i]); touching[idx[i]] = 1; } }
+  for (let i = 0; i < n; i++) phys.age[i] = touching[i] ? Math.min(65000, phys.age[i] + 1) : 0;   // 何コマ続けて床に付いているか
+  phys.prev = { idx: idx2, xz, ys };
+  // 倒れたか：コアの上向きが 50 度以上かたむいたら
+  const core = insts.find(i => !i.target);
+  if (core) {
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(core.root.getWorldQuaternion(new THREE.Quaternion()));
+    const fell = up.y < 0.64;
+    if (fell !== phys.fallen) { phys.fallen = fell; showTestStats(); }
+  }
+}
+function physUpdate(dt) {
+  if (!testMode || !insts.length || !document.getElementById("testGravity").checked) return;
+  if (!phys || phys.sig !== physSig()) physInit();
+  dt = Math.min(dt, 1 / 30);
+  physStep(dt);
+  // キャタピラ：向いている方へ進む（立っているときだけ）
+  if (autoMove && autoMove.rolls && !phys.fallen && insts.some(i => i.tracks.length) && document.getElementById("testWalk").checked) {
+    const core = insts.find(i => !i.target).root;
+    const f = new THREE.Vector3(0, 0, 1).applyQuaternion(core.getWorldQuaternion(new THREE.Quaternion())); f.y = 0;
+    if (f.lengthSq() > 1e-4) { f.setLength(0.9 * dt); shiftAll(f.x, 0, f.z); }
+  }
+  // 部屋の外へ出たら、奥の真ん中から出直す
+  const p = buildGroup.position;
+  if (!window.__rsNoWrap && (Math.abs(p.x) > ROOM_W / 2 - 1 || p.z > ROOM_D / 2 - 1.5 || p.z < -ROOM_D / 2 + 1)) { p.x = 0; p.z = -ROOM_D / 2 + 1.5; phys.prev = null; }
+}
+function resetBody() {
+  buildGroup.position.set(0, 0, 0); buildGroup.quaternion.identity(); phys = null;
+}
+function stopAutoMove() {
+  if (autoMove) {
+    for (const j of autoMove.joints) { if (j.u.rs_joint_type === "SLIDE") j.o.position[j.ax] = j.base; else j.o.rotation[j.ax] = j.base; }
+    autoMove.core.position.y = autoMove.baseY;
+  }
+  autoMove = null; setRun(false);
+  const b = document.getElementById("testMove");
+  b.setAttribute("aria-pressed", "false"); b.textContent = "動作テスト";
+}
+// 歩き方を自動で選ぶ：3つの歩き方で1周期ぶん動かしてみて、脚のぶつかりが一番少ない（同じなら進む見込みが大きい）ものにする
+function pickGait() {
+  const probe = planAutoMotion();
+  if (!probe || !probe.legInsts || probe.legInsts.size <= 2) return "trot";
+  const legRoots = new Set(probe.legOf.values());
+  if (legRoots.size <= 2) return "trot";
+  const results = [];
+  for (const g of ["trot", "pace", "wave"]) {
+    planAutoMotion.gait = g;
+    const plan = planAutoMotion();
+    const saved = plan.joints.map(j => j.u.rs_joint_type === "SLIDE" ? j.o.position[j.ax] : j.o.rotation[j.ax]);
+    let bumps = 0; const steps = 28;
+    for (let i = 1; i <= steps; i++) {
+      const tt = i / steps * Math.PI * 2;
+      for (const j of plan.joints) { if (j.wheel || j.u.rs_joint_type === "SLIDE") continue; j.prev = j.o.rotation[j.ax]; j.o.rotation[j.ax] = j.base + j.sg * THREE.MathUtils.degToRad(hingeDeg(j, tt, plan.legs)); }
+      const before = plan.bumps; legContact(plan); if (plan.bumps > before) bumps++;
+    }
+    plan.joints.forEach((j, i) => { if (j.u.rs_joint_type === "SLIDE") j.o.position[j.ax] = saved[i]; else j.o.rotation[j.ax] = saved[i]; });
+    results.push({ g, bumps });
+  }
+  results.sort((a, b) => a.bumps - b.bumps || ["trot", "wave", "pace"].indexOf(a.g) - ["trot", "wave", "pace"].indexOf(b.g));
+  pickGait.last = results;
+  return results[0].g;
+}
+const GAIT_LABEL = { trot: "対角（トロット）", pace: "同じ側（ペース）", wave: "後ろから順（ウェーブ）" };
+function startAutoMove() {
+  stopAutoMove(); startMove(null); stopJsonMove();
+  planAutoMotion.gait = document.getElementById("testGait").value === "auto" ? pickGait() : document.getElementById("testGait").value;
+  autoMove = tunePlan(planAutoMotion());
+  if (!autoMove) { status.textContent = "先にロボットを組み立てるか、「ランダムに組む」を押してください"; return; }
+  if (autoMove.rolls) setRun(true);
+  const b = document.getElementById("testMove");
+  b.setAttribute("aria-pressed", "true"); b.textContent = "動作テストを止める";
+  showTestStats();
+}
+
+// --- ランダムに組む：人がクリックするのと同じ手順（空いた接続口 → 合うパーツ）で、合うものから選ぶ ---
+const pickOne = a => a[Math.floor(Math.random() * a.length)];
+function randomBuild() {
+  randomBuild.rejected = 0;
+  stopAutoMove(); startMove(null); resetBody();
+  resetBuild();
+  const keys = Object.keys(templates).filter(k => !/旧/.test(templates[k].label));
+  const cores = keys.filter(k => templates[k].kind === "core");
+  if (!cores.length) return;
+  const core = instantiate(pickOne(cores)); buildGroup.add(core.root);
+  const sym = document.getElementById("testSym").checked;
+  buildGroup.updateMatrixWorld(true);
+  // 左右そろえ：コアの左右対の接続口に同じ印を付け、その先は「印＋何番目の口」で同じ選び方をする
+  const sig = new Map(), choice = new Map();
+  const cInv = core.root.matrixWorld.clone().invert();
+  const lp = s => s.getWorldPosition(new THREE.Vector3()).applyMatrix4(cInv);
+  // 同じパーツの中で左右対になる口（コアの左右・腰の左右の脚など）は同じ印にする
+  const markPairs = (socks, prefix) => {
+    buildGroup.updateMatrixWorld(true);
+    socks.forEach((s, i) => {
+      const p = lp(s), rs = s.userData.rs;
+      const twin = Math.abs(p.x) < 0.05 ? -1 : socks.findIndex((t, k) => k !== i && t.userData.rs.shape === rs.shape && t.userData.rs.size === rs.size
+        && lp(t).distanceTo(new THREE.Vector3(-p.x, p.y, p.z)) < 0.05);
+      sig.set(s, sym && twin >= 0 ? `${prefix}p${Math.min(i, twin)}` : `${prefix}${i}`);
+    });
+  };
+  markPairs(core.sockets, "c");
+  const queue = [...core.sockets];
+  let count = 0;
+  while (queue.length && count < 15) {
+    const s = queue.shift();
+    if (s.userData.rs.partner) continue;
+    const key = sig.get(s);
+    // 合うパーツの候補。置いたとたんに別のパーツと重なるものは外して、次の候補を試す（3回まで）
+    let tries = choice.has(key) ? [choice.get(key)] : null;
+    if (!tries) {
+      const cands = keys.filter(k => (templates[k].kind !== "core" || Math.random() < 0.08) && checkLink(s, { sockets: templates[k].probe }).socket);
+      tries = cands.length && Math.random() > 0.2 ? cands.sort(() => Math.random() - 0.5).slice(0, 3) : [];   // ときどき空けておく
+    }
+    let inst = null;
+    for (const pick of tries) {
+      if (!pick) break;
+      picked = s; attach(pick);
+      const got = insts[insts.length - 1];
+      if (!got || !got.own) break;
+      if (findOverlaps(null, 1, 2).some(o => o.a === got || o.b === got)) { removeInst(got); randomBuild.rejected++; continue; }   // 置くときは少し厳しめ（触れそうなものもよける）
+      inst = got; break;
+    }
+    if (!choice.has(key)) choice.set(key, inst ? inst.key : null);
+    if (!inst) continue;
+    count++;
+    const freeS = inst.sockets.filter(t => !t.userData.rs.partner);
+    markPairs(freeS, `${key}/`);
+    queue.push(...freeS);
+  }
+  picked = null; selected = null;
+  showPanel(); showTestStats(); frameRoom();
+  physInit(); buildGroup.position.y = 0.4;   // 少し上から落とす
+  status.textContent = `ランダムに組みました（パーツ ${insts.length - 1}個）。「動作テスト」で動かします`;
+}
+
+// --- 結果 ---
+function showTestStats() {
+  const plan = autoMove || planAutoMotion();
+  const st = document.getElementById("testStats"), ck = document.getElementById("testChecks");
+  if (!plan) { st.innerHTML = "<dt>パーツ</dt><dd>—</dd>"; ck.innerHTML = ""; return; }
+  const cnt = r => plan.joints.filter(j => j.role === r && !j.wheel).length;
+  const wheels = plan.joints.filter(j => j.wheel).length;
+  const tracks = insts.filter(i => i.tracks.length).length;
+  const front = insts.filter(i => i.own && i.mirrored).length;
+  const core = insts.find(i => !i.target);
+  st.innerHTML = `<dt>コア</dt><dd>${core ? core.label : "—"}</dd>
+    <dt>パーツ</dt><dd>${insts.length - 1}個</dd>
+    <dt>関節</dt><dd>脚 ${cnt("leg")}・腕 ${cnt("arm")}・頭や道具 ${cnt("top") + cnt("tool")}</dd>
+    <dt>回るもの</dt><dd>車輪 ${wheels}・キャタピラ ${tracks}</dd>`;
+  const moving = plan.joints.length;
+  const items = [
+    [`すべてのパーツが同じ規格の接続口でつながっています`, true],
+    [`関節 ${moving}個に動きを付けました（すべて範囲の内側）`, moving > 0],
+    [`歩き方：${plan.legs ? "脚で歩く" : plan.rolls ? "車輪・キャタピラで進む" : "その場で動く"}`, true],
+    [`左右で同じパーツを使った所は、鏡にして正面にそろえました（${front}か所）`, true],
+  ];
+  if (!moving) items[1] = ["動く関節がありません（関節のあるパーツをつなぐと動きます）", false];
+  const ov = plan.overlaps || tunePlan(plan).overlaps;
+  if (phys && document.getElementById("testGravity").checked) items.push(phys.fallen ? ["重力：倒れました（重心が支える面の外に出た）", false] : ["重力：自分の足（または車輪・体）で立っています", true]);
+  if (randomBuild.rejected) items.push([`ランダムに組むとき、置くと重なるパーツを ${randomBuild.rejected} 回よけました`, true]);
+  if (plan.tuned) items.push([`ぶつかる関節の振れ幅を小さくしました（${plan.tuned}回）`, true]);
+  if (plan.legInsts && plan.legInsts.size > 2) items.push([plan.bumps ? `脚どうしがぶつかって止まった：${plan.bumps}コマ（すり抜けはしません）` : "脚どうしはぶつかっていません", true]);
+  if (jsonMove) items.push([`手付けの動き：${jsonMove.clip.name}（関節 ${jsonMove.matched}/${jsonMove.total} が合った。このロボの役割 ${jsonMove.roles} 個）${jsonMove.lastEvent ? "　イベント：" + jsonMove.lastEvent : ""}`, jsonMove.matched > 0]);
+  if (autoMove && autoMove.gp) { const g = autoMove.gp; items.push([`歩き：脚の長さ ${g.L.toFixed(2)}m → 歩幅 ${g.lam.toFixed(2)}m・周期 ${g.T.toFixed(2)}秒・速さ ${g.v.toFixed(2)}m/s・床に付く割合 ${Math.round(g.duty * 100)}%・振り ${g.A.toFixed(0)}度（Fr ${g.Fr}）`, true]); }
+  if (planAutoMotion.usedGait) items.push([`歩き方：${GAIT_LABEL[planAutoMotion.usedGait]}` + (pickGait.last && document.getElementById("testGait").value === "auto" ? `（1周期の試し：${pickGait.last.map(r => `${GAIT_LABEL[r.g].split("（")[0]} ${r.bumps}`).join("・")}）` : ""), true]);
+  if (!ov.length) items.push(["部品どうしの重なりはありません（止まった姿勢・動作中とも）", true]);
+  for (const o of ov.slice(0, 4)) items.push([`${o.a.label} と ${o.b.label} が重なっています（${o.still ? "止まった姿勢" : "動作中"}）`, false]);
+  if (ov.length > 4) items.push([`ほかに ${ov.length - 4} 組の重なり`, false]);
+  ck.innerHTML = items.map(([t, ok]) => `<li class="${ok ? "" : "bad"}">${t}</li>`).join("");
+}
+
+// --- おまかせ連続テスト：ランダムに組む → 動かす を 6 秒ごとにくり返す ---
+let autoTimer = null;
+function setAutoTest(on) {
+  clearInterval(autoTimer); autoTimer = null;
+  const b = document.getElementById("testAuto");
+  b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "連続テストを止める" : "おまかせ連続テスト";
+  if (!on) return;
+  const step = () => { randomBuild(); startAutoMove(); };
+  step(); autoTimer = setInterval(step, 6000);
+}
+document.getElementById("testRandom").addEventListener("click", () => { setAutoTest(false); randomBuild(); });
+document.getElementById("testMove").addEventListener("click", () => { setAutoTest(false); autoMove ? stopAutoMove() : startAutoMove(); });
+document.getElementById("testAuto").addEventListener("click", () => setAutoTest(!autoTimer));
+document.getElementById("testSym").addEventListener("change", () => {});
+for (const id of ["testSpeed", "testGait"]) document.getElementById(id).addEventListener("change", () => { if (autoMove) startAutoMove(); });   // 動かしている最中に変えたら組み直す
+
+// 見本 / 組み立て / テスト部屋 の切り替え
+function setMode(mode) {
+  const build = mode !== "view";
+  testMode = mode === "test";
+  document.getElementById("tabView").setAttribute("aria-selected", String(mode === "view"));
+  document.getElementById("tabBuild").setAttribute("aria-selected", String(mode === "build"));
+  document.getElementById("tabTest").setAttribute("aria-selected", String(testMode));
+  document.getElementById("paneView").hidden = mode !== "view";
+  document.getElementById("paneBuild").hidden = mode !== "build";
+  document.getElementById("paneTest").hidden = !testMode;
+  viewGroup.visible = !build; buildGroup.visible = build;
+  room.visible = testMode; grid.visible = !testMode;
+  if (!testMode) { setAutoTest(false); stopAutoMove(); resetBody(); }
+  status.textContent = testMode ? "「ランダムに組む」か、組み立てたロボットで「動作テスト」を押してください"
+    : build ? (insts.length ? "光っている接続口をクリックして、パーツをつなぎましょう" : "はじめに置くコアを選びましょう")
+    : VIEW_HINT;
+  showPanel();
+  if (testMode) { showTestStats(); frameRoom(); }
+}
+document.getElementById("tabView").addEventListener("click", () => setMode("view"));
+document.getElementById("tabBuild").addEventListener("click", () => setMode("build"));
+document.getElementById("tabTest").addEventListener("click", () => setMode("test"));
+
+function fitView() {   // 3D の大きさは #view に合わせる（スマホでは上半分）
+  camera.aspect = view.clientWidth / view.clientHeight; camera.updateProjectionMatrix();
+  renderer.setSize(view.clientWidth, view.clientHeight);
+}
+addEventListener("resize", fitView);
+document.getElementById("panelToggle").addEventListener("click", e => {
+  const min = document.body.classList.toggle("panel-min");
+  e.currentTarget.setAttribute("aria-expanded", String(!min));
+  e.currentTarget.textContent = min ? "▴ パネルを開く" : "▾ パネルをたたむ";
+  fitView();
+});
+window.__rs = { scene, camera, renderer, insts, buildGroup, controls, buildRecipe, setRun, swapTool, startMove, randomBuild, startAutoMove, stopAutoMove, setMode, planAutoMotion, checkOverlaps, tunePlan, lowestY, updateAutoMove, physUpdate, resetBody, getPhys: () => phys, getPlan: () => autoMove, pickGait, RECIPES, buildMultiLeg, roleMapWeb, startJsonMove, stopJsonMove, updateJsonMove, getJsonMove: () => jsonMove, jsonAnims, fxUpdate, renderShaken, fxEvent };  // 確認用
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  for (const mx of mixers) mx.update(dt);
+  updateTracks(dt);
+  updateMove(dt);
+  if (!window.__rsManual) { updateJsonMove(dt); updateAutoMove(dt); physUpdate(dt); }   // __rsManual：確認用にコマ送りするとき
+  updateShots(dt);
+  if (!window.__rsManual) fxUpdate(dt);   // コマ送りの確認中は、確認側が進める
+  controls.update();
+  renderShaken();   // 画面の揺れはこのコマだけ足して描き、すぐ戻す（OrbitControls の位置に積み重ならないように）
+});
+</script>
+</body>
+</html>

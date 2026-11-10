@@ -1,0 +1,308 @@
+{
+ "parts": [
+  {
+   "key": "CoreA",
+   "label": "コア（胴・上）",
+   "file": "parts/CoreA.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreB",
+   "label": "コア（胴・下）",
+   "file": "parts/CoreB.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreMining",
+   "label": "コア（採掘）",
+   "file": "parts/CoreMining.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreAltar",
+   "label": "コア（古代の祭壇）",
+   "file": "parts/CoreAltar.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreAltarH",
+   "label": "コア（古代の祭壇・人型）",
+   "file": "parts/CoreAltarH.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreAltarB",
+   "label": "コア（古代の祭壇・ボス）",
+   "file": "parts/CoreAltarB.glb",
+   "kind": "core"
+  },
+  {
+   "key": "CoreBody",
+   "label": "コア（胴つなぎ）",
+   "file": "parts/CoreBody.glb",
+   "kind": "core"
+  },
+  {
+   "key": "Arm",
+   "label": "腕",
+   "file": "parts/Arm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "ArmBlade",
+   "label": "刃を収納した腕",
+   "file": "parts/ArmBlade.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossChest",
+   "label": "番人の胸板（窓あき装甲）",
+   "file": "parts/BossChest.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossFist",
+   "label": "番人の手（石の拳）",
+   "file": "parts/BossFist.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossFoot",
+   "label": "番人の足",
+   "file": "parts/BossFoot.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossForearm",
+   "label": "番人の前腕",
+   "file": "parts/BossForearm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossForearmB",
+   "label": "番人の前腕（細身）",
+   "file": "parts/BossForearmB.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossHead",
+   "label": "番人の頭（尖塔の兜）",
+   "file": "parts/BossHead.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossHip",
+   "label": "番人の腰",
+   "file": "parts/BossHip.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossPalm",
+   "label": "番人の手（手のひら砲）",
+   "file": "parts/BossPalm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossShin",
+   "label": "番人のすね",
+   "file": "parts/BossShin.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossShoulder",
+   "label": "番人の肩",
+   "file": "parts/BossShoulder.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossThigh",
+   "label": "番人の太もも",
+   "file": "parts/BossThigh.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossUpperArm",
+   "label": "番人の上腕",
+   "file": "parts/BossUpperArm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "BossUpperArmB",
+   "label": "番人の上腕（細身）",
+   "file": "parts/BossUpperArmB.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Crawler",
+   "label": "キャタピラ",
+   "file": "parts/Crawler.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemArm",
+   "label": "（旧）ゴーレムの腕・1本もの",
+   "file": "parts/GolemArm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemFist",
+   "label": "ゴーレムの手（石の拳）",
+   "file": "parts/GolemFist.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemFoot",
+   "label": "ゴーレムの足",
+   "file": "parts/GolemFoot.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemForearm",
+   "label": "ゴーレムの前腕",
+   "file": "parts/GolemForearm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemHead",
+   "label": "古代ゴーレムの頭",
+   "file": "parts/GolemHead.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemHeadEye",
+   "label": "ゴーレムの頭（一つ目）",
+   "file": "parts/GolemHeadEye.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemLeg",
+   "label": "（旧）ゴーレムの脚・1本もの",
+   "file": "parts/GolemLeg.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemShin",
+   "label": "ゴーレムのすね",
+   "file": "parts/GolemShin.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemThigh",
+   "label": "ゴーレムの太もも",
+   "file": "parts/GolemThigh.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "GolemUpperArm",
+   "label": "ゴーレムの上腕",
+   "file": "parts/GolemUpperArm.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Head",
+   "label": "頭",
+   "file": "parts/Head.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Hip",
+   "label": "腰",
+   "file": "parts/Hip.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Leg",
+   "label": "脚",
+   "file": "parts/Leg.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "LegWheel",
+   "label": "車輪の脚",
+   "file": "parts/LegWheel.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Link_L",
+   "label": "アーム元（つなぎ）",
+   "file": "parts/Link_L.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Link_M",
+   "label": "アーム先（つなぎ）",
+   "file": "parts/Link_M.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Pickaxe",
+   "label": "ツルハシ",
+   "file": "parts/Pickaxe.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Shoulder",
+   "label": "肩",
+   "file": "parts/Shoulder.glb",
+   "kind": "part",
+   "swing": [
+    -60.0,
+    180.0
+   ]
+  },
+  {
+   "key": "Spine",
+   "label": "背骨（つなぎ）",
+   "file": "parts/Spine.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "Sword",
+   "label": "剣",
+   "file": "parts/Sword.glb",
+   "kind": "part",
+   "swing": null
+  },
+  {
+   "key": "UpperUnit",
+   "label": "上部ユニット",
+   "file": "parts/UpperUnit.glb",
+   "kind": "part",
+   "swing": null
+  }
+ ]
+}
