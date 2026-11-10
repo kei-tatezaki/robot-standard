@@ -3187,9 +3187,13 @@ function initSwap() {
   document.getElementById("testWalk").checked = true;
   setMode("test");
   buildRecipe("human");
-  startAutoMove();
   makeSetThumbs();
-  setTimeout(frameSwap, 400);
+  // はじめの2秒：胴から外へ、つながる順にパーツが付いていく（規格でつながる様子を最初に見せる）
+  const depth = i => { let d = 0; for (let x = i; x.target; x = x.target.userData.rs.inst) d++; return d; };
+  frameSwap(); if (camTween) { camTween.d = 0.001; updateCam(1); }   // 組み上がった大きさでカメラを決めてから縮める
+  const items = insts.filter(i => i.target).sort((a, b) => depth(a) - depth(b));
+  for (const [n, i] of items.entries()) { i.root.userData.s1 = i.root.scale.clone(); i.root.scale.setScalar(0.001); i.root.userData.delay = 0.25 + n * 0.09; }
+  swapAnim = { t: 0, fresh: items, intro: true };
   status.textContent = "";
 }
 
@@ -3488,7 +3492,18 @@ function updateSwap(dt) {
   updateCam(dt);
   if (ring) ring.material.opacity = 0.55 + 0.4 * Math.sin(performance.now() / 180);
   const a = swapAnim; if (!a) return;
-  a.t += dt;
+  a.t += Math.min(dt, 1 / 30);   // 重い処理の直後の長いコマで、動きが飛ばないように
+  if (a.intro) {   // はじめの組み上がり
+    let done = true;
+    for (const f of a.fresh) {
+      const k = Math.min(1, Math.max(0, (a.t - f.root.userData.delay) / 0.22));
+      if (k < 1) done = false;
+      f.root.scale.copy(f.root.userData.s1).multiplyScalar(Math.max(0.001, backOut(k)));
+      if (k >= 1 && !f.root.userData.popped) { f.root.userData.popped = true; if (f.target) fxRing(f.target.getWorldPosition(V3()), 0.35, 0xf3e2c0, 0.3); }
+    }
+    if (done) { swapAnim = null; phys = null; startAutoMove(); }
+    return;
+  }
   const k = Math.min(1, a.t / 0.28), e = Math.max(0.001, backOut(k));
   for (const f of a.fresh) f.root.scale.copy(f.root.userData.s1).multiplyScalar(e);
   if (k >= 1) {
