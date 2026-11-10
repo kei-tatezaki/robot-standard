@@ -154,6 +154,9 @@
     color: var(--ink); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
   .swapToast.on { opacity: 1; transform: translate(-50%, 0); }
   body.editing .moreLinks { display: none; }
+  .swapCards.presets { grid-template-columns: repeat(5, 1fr); }
+  .swapCards.presets img { height: 96px; }
+  .swapCard span.ai { color: var(--warn); }
   .swapResult { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 1.5em; line-height: 1.5; }
   .swapResult b { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } }
@@ -171,6 +174,9 @@
     .swapCards.look { grid-template-columns: repeat(5, 1fr); }
     .swapCard img { height: 60px; }
     .editPanel .swapCards { grid-template-columns: repeat(4, 1fr); max-height: 30vh; }
+    .swapCards.presets { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+    .swapCards.presets .swapCard { flex: 0 0 30%; scroll-snap-align: start; }
+    .swapCards.presets img { height: 70px; }
     .hintText { font-size: 12px; padding: 9px 4px; }
     .swapToast { bottom: auto; top: 92px; font-size: 12px; }
     .rotNote { display: none; }
@@ -3059,6 +3065,14 @@ const ARM_SETS = [   // 肩の先の 六角M の口
   { id: "bossFist", label: "番人の腕（拳）", note: "上腕・前腕・拳", chain: ["BossUpperArm", "BossForearm", "BossFist"] },
   { id: "bossPalm", label: "番人の腕（掌）", note: "上腕・前腕・掌", chain: ["BossUpperArmB", "BossForearmB", "BossPalm"] },
 ];
+const PRESETS = [   // はじめのロボット（ai：見た目に AI 生成のパーツを使っているか。審査対象外の申告のため表示する）
+  { id: "human", label: "人型", note: "自作のパーツだけ", ai: 0, theme: "WHITE" },
+  { id: "wheel", label: "車輪型", note: "自作のパーツだけ", ai: 0, theme: "WHITE" },
+  { id: "golemH", label: "古代ゴーレム", note: "見た目はAI生成", ai: 2, theme: "ANCIENT" },
+  { id: "boss", label: "塔の番人", note: "見た目はAI生成", ai: 2, theme: "ANCIENT" },
+  { id: "quad", label: "四つ足", note: "脚はAI生成", ai: 1, theme: "ANCIENT" },
+];
+let preset = "human";
 const KIND_INFO = {
   legs: { title: "脚（腰ごと）", where: "胴の下" }, arm: { title: "腕", where: "肩の先" }, shoulder: { title: "肩", where: "胴の横" },
   head: { title: "頭", where: "胴の上" }, part: { title: "パーツ", where: "" },
@@ -3176,14 +3190,14 @@ function initSwap() {
   document.body.appendChild(ed);
   const hint = document.createElement("div"); hint.className = "swapHints"; hint.id = "swapHints";
   hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・肩・頭）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>` +
-    `<button type="button" class="hintBtn ghost" id="hintReset" hidden>最初の形に戻す</button>`;
+    `<button type="button" class="hintBtn ghost" id="hintReset" hidden>最初の形に戻す</button><button type="button" class="hintBtn ghost" id="hintPreset">ロボットを選ぶ</button>`;
   document.body.appendChild(hint);
   document.getElementById("hintLook").addEventListener("click", openLook);
   document.getElementById("hintReset").addEventListener("click", () => {
     if (edit || swapAnim) return;
-    stopAutoMove(); buildRecipe("human"); refreshMarks(); phys = null; startAutoMove(); commit();
-    document.getElementById("hintReset").hidden = true; clunk(0.8); toast("最初の形に戻しました"); frameSwap();
+    startPreset(preset); clunk(0.8); toast("最初の形に戻しました");
   });
+  document.getElementById("hintPreset").addEventListener("click", openPresets);
   document.getElementById("swapClose").addEventListener("click", closeLook);
   document.getElementById("rotL").addEventListener("click", () => rotateEdit(-1));
   document.getElementById("rotR").addEventListener("click", () => rotateEdit(1));
@@ -3198,8 +3212,57 @@ function initSwap() {
   scene.fog = new THREE.Fog(scene.background.getHex(), 12, 34);
   document.getElementById("testWalk").checked = true;
   setMode("test");
-  buildRecipe("human");
   makeSetThumbs();
+  const pt = document.createElement("div"); pt.className = "swapTray presetTray"; pt.id = "presetTray"; pt.hidden = true;
+  pt.innerHTML = `<div class="swapHead"><div><b>はじめのロボットを選ぶ</b><span class="sub">どれも同じ規格（接続口・役割名）で組んであります。選んだあと、替えたい所を押して付け替えられます</span></div>
+    <button class="linkBtn" type="button" id="presetClose">閉じる</button></div><div class="swapCards presets" id="presetCards"></div>`;
+  document.body.appendChild(pt);
+  document.getElementById("presetClose").addEventListener("click", closePresets);
+  startPreset("human");
+  openPresets();
+}
+function makePresetThumbs() {   // 組み上がったロボットを、そのまま絵にする（presets/*.png を作るときだけ使う。ふだんは画像を読む）
+  const out = {};
+  for (const p of PRESETS) {
+    if (!RECIPES[p.id]) continue;
+    buildRecipe(p.id); if (p.theme) applyTheme(p.theme);
+    const bp = buildGroup.parent, vis = buildGroup.visible; thumbScene.add(buildGroup); buildGroup.visible = true;
+    buildGroup.traverse(o => { if (o.userData.isMark) o.visible = false; });
+    out[p.id] = renderThumbOf(buildGroup);
+    bp.add(buildGroup); buildGroup.visible = vis;
+  }
+  return out;
+}
+window.__rsTools = { makePresetThumbs, thumbR };
+function openPresets() {
+  if (edit) return;
+  if (trayOpen) closeLook();
+  const box = document.getElementById("presetCards"); box.innerHTML = "";
+  for (const p of PRESETS) {
+    if (!RECIPES[p.id]) continue;
+    const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (p.id === preset ? " now" : "");
+    b.dataset.id = p.id;
+    b.innerHTML = `<img alt="" src="presets/${p.id}.png"><b>${p.label}</b><span class="${p.ai ? "ai" : ""}">${p.note}</span>`;
+    b.addEventListener("click", () => { startPreset(p.id); closePresets(); });
+    box.appendChild(b);
+  }
+  document.getElementById("presetTray").hidden = false;
+  document.body.classList.add("trayOpen"); trayOpen = "preset";
+  requestAnimationFrame(frameSwap);
+}
+function closePresets() {
+  document.getElementById("presetTray").hidden = true;
+  document.body.classList.remove("trayOpen"); trayOpen = null; frameSwap();
+}
+function startPreset(id) {
+  preset = id;
+  stopAutoMove();
+  buildGroup.position.set(0, 0, 0); buildGroup.quaternion.identity(); phys = null;
+  controls.target.set(0, 1, 0); camera.position.set(3, 3, 12);
+  buildRecipe(id);
+  const P = PRESETS.find(x => x.id === id); if (P && P.theme) applyTheme(P.theme);
+  refreshMarks(); commit();
+  document.getElementById("hintReset").hidden = true;
   // はじめの2秒：胴から外へ、つながる順にパーツが付いていく（規格でつながる様子を最初に見せる）
   const depth = i => { let d = 0; for (let x = i; x.target; x = x.target.userData.rs.inst) d++; return d; };
   frameSwap(); if (camTween) { camTween.d = 0.001; updateCam(1); }   // 組み上がった大きさでカメラを決めてから縮める
@@ -3212,6 +3275,7 @@ function initSwap() {
 // --- 見た目 ---
 function openLook() {
   if (edit) return;
+  if (trayOpen === "preset") closePresets();
   const box = document.getElementById("swapCards"); box.innerHTML = "";
   document.getElementById("swapResult").textContent = "";
   const now = document.querySelector('.chip[aria-pressed="true"]');
@@ -3231,13 +3295,16 @@ function openLook() {
   requestAnimationFrame(frameSwap);
 }
 function closeLook() {
+  if (trayOpen === "preset") { closePresets(); return; }
   document.getElementById("swapTray").hidden = true;
   document.body.classList.remove("trayOpen"); trayOpen = null; frameSwap();
 }
 
 // --- 替える場所（接続口）を、押したパーツから決める ---
+function hipOf(inst) { for (let x = inst; x; x = x.target && x.target.userData.rs.inst) if (/Hip$/.test(x.key) && x.target) return x; return null; }
 function slotOf(inst) {
-  if (legTree().has(inst)) { const h = hipInst(); return { kind: "legs", target: h.target, root: h }; }
+  const h = hipOf(inst);
+  if (h) return { kind: "legs", target: h.target, root: h };
   let cur = inst;
   while (cur.target) { const p = cur.target.userData.rs.inst; if (!p.target || /Shoulder/.test(p.key)) break; cur = p; }
   if (!cur.target) return null;   // コア（胴）は替えない → 見た目
@@ -3457,10 +3524,15 @@ let camTween = null;
 function tweenCam(target, pos, sec = 0.5) { camTween = { t: 0, d: sec, ft: controls.target.clone(), fp: camera.position.clone(), tt: target, tp: pos }; }
 function frameSwap() {   // ロボット全体を、下のパネルに隠れない上の空きに大きく
   if (edit) return;
+  const growing = swapAnim && swapAnim.intro ? swapAnim.fresh.map(f => [f, f.root.scale.clone()]) : [];
+  for (const [f] of growing) f.root.scale.copy(f.root.userData.s1);   // 組み上がり途中でも、組み上がった大きさで決める
   buildGroup.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(buildGroup); if (box.isEmpty()) return;
+  const box = new THREE.Box3().setFromObject(buildGroup);
+  for (const [f, sc] of growing) f.root.scale.copy(sc);
+  buildGroup.updateMatrixWorld(true);
+  if (box.isEmpty()) return;
   const H = renderer.domElement.clientHeight;
-  const tray = document.getElementById("swapTray");
+  const tray = document.getElementById(trayOpen === "preset" ? "presetTray" : "swapTray");
   const cover = trayOpen && tray ? H - tray.getBoundingClientRect().top + 12 : (innerWidth <= 760 ? 84 : 70);
   const top = innerWidth <= 760 ? 96 : 76;
   const freeFrac = Math.max(0.4, (H - cover - top) / H);
