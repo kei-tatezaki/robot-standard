@@ -118,7 +118,8 @@
   .swapHead b { font-size: 15px; display: block; }
   .swapHead .sub { font-size: 12px; color: var(--muted); }
   .swapCards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .swapCards.look { grid-template-columns: repeat(5, 1fr); }
+  .swapCards.look { grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  #swapTray { width: min(680px, calc(100vw - 24px)); }
   .swapCard, .lookCard { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 1px; font: inherit; color: var(--ink);
     text-align: left; background: #31363c; border: 1px solid var(--panel-edge); border-radius: 10px; padding: 5px 5px 7px; cursor: pointer;
     transition: border-color .12s; }
@@ -129,7 +130,7 @@
   .swapCard img { width: 100%; height: 74px; object-fit: contain; border-radius: 7px; background: #2a2e33; }
   .swapCard b, .lookCard b { font-size: 12px; margin-top: 4px; }
   .swapCard span { font-size: 11px; color: var(--muted); }
-  .lookCard .swatch { width: 44px; height: 44px; border-radius: 8px; overflow: hidden; display: grid; grid-template-rows: 2fr 1fr 1fr; }
+  .lookCard .swatch { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; display: grid; grid-template-rows: 2fr 1fr 1fr; }
   .lookCard .swatch span { background-size: 220%; background-position: center; }
   .lookCard .glow { position: relative; }
   .lookCard .glow::after { content: ""; position: absolute; right: 5px; top: 50%; width: 12px; height: 3px; border-radius: 2px;
@@ -3302,7 +3303,7 @@ function beginEdit(slot) {
   document.getElementById("editSub").innerHTML = `${info.where ? info.where + "の " : ""}<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span> の口（光っている輪）につながるものだけを出しています`;
   document.getElementById("editSymWrap").hidden = !mirror;
   document.getElementById("rotNote").textContent = rs.shape === "CIRCLE" ? "丸い口なので15度ずつ回せます" : rs.shape === "SQUARE" ? "四角い口なので90度ずつ" : "六角の口なので60度ずつ";
-  document.getElementById("editResult").textContent = "";
+  document.getElementById("editResult").textContent = "ロボットをドラッグすると、周りから見られます";
   const box = document.getElementById("editCards"); box.innerHTML = "";
   for (const c of candidatesFor(slot)) {
     const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (c.id === edit.cur ? " now" : "");
@@ -3362,7 +3363,8 @@ function choose(c, force) {
   edit.choice = c; edit.changed = c.id !== edit.cur; edit.rot = 0;
   edit.sock = sock; showRing(sock);
   dimOthers();
-  setTimeout(() => { if (edit && !swapAnim) focusOn(resolvePath(edit.path)); else if (edit) setTimeout(() => edit && focusOn(resolvePath(edit.path)), 300); }, 420);   // 新しいパーツの大きさに合わせて寄り直す
+  refreshMarks();
+  if (!fresh.length) focusOn(resolvePath(edit.path));   // 新しいパーツのときは、付き終わってから寄り直す（updateSwap）   // 新しいパーツの大きさに合わせて寄り直す
   phys = null;
   if (fresh.length) swapAnim = { t: 0, fresh };
   document.querySelectorAll("#editCards .swapCard").forEach(b => b.classList.toggle("sel", b.dataset.id === c.id));
@@ -3395,7 +3397,7 @@ function endEdit() {
   phys = null; startAutoMove();
   frameSwap();
 }
-function cancelEdit() { if (!edit) return; if (edit.changed) loadBuild(edit.snap); endEdit(); }
+function cancelEdit() { if (!edit) return; if (edit.changed) { loadBuild(edit.snap); refreshMarks(); } endEdit(); }
 function confirmEdit() {
   if (!edit || !edit.changed) return;
   const kind = edit.kind, label = edit.choice ? edit.choice.label : "";
@@ -3443,11 +3445,17 @@ function focusOn(sock) {   // つく場所へ寄る。つけたパーツが入�
   const r = editRootAt(sock);
   const box = r ? new THREE.Box3().setFromObject(r.root) : new THREE.Box3().setFromCenterAndSize(p, new THREE.Vector3(0.8, 0.8, 0.8));
   box.expandByPoint(p);
+  const symOn = edit && edit.mpath && !document.getElementById("editSymWrap").hidden && document.getElementById("editSym").checked;
+  const ms = symOn ? resolvePath(edit.mpath) : null, mr = ms && editRootAt(ms);
+  if (mr) { box.union(new THREE.Box3().setFromObject(mr.root)); box.expandByPoint(ms.getWorldPosition(V3())); }
   const c = box.getCenter(V3()), rad = Math.max(0.6, box.getSize(V3()).length() / 2);
-  const core = insts.find(i => !i.target).root.getWorldPosition(V3());
-  // 口の外側（横方向だけ）から。下向きの口（腰）でも床の下へ回り込まないよう、いつも少し上から見る
-  const out = p.clone().sub(core); out.y = 0; if (out.lengthSq() < 0.01) out.set(0, 0, 1); out.normalize();
-  const dir = out.multiplyScalar(0.8).add(new THREE.Vector3(0.25, 0.35, 1).normalize()); dir.y = Math.max(dir.y, 0.3); dir.normalize();
+  const coreObj = insts.find(i => !i.target).root, core = coreObj.getWorldPosition(V3());
+  const q = coreObj.getWorldQuaternion(new THREE.Quaternion());
+  const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q); front.y = 0; front.normalize();
+  // 口の外側（横方向だけ）から。左右両方なら正面から。下向きの口（腰）でも床の下へ回り込まないよう、いつも少し上から見る
+  const out = mr ? front.clone() : p.clone().sub(core); out.y = 0; if (out.lengthSq() < 0.01) out.copy(front); out.normalize();
+  const side = new THREE.Vector3(0.25, 0.35, 1).applyQuaternion(q).normalize();
+  const dir = out.multiplyScalar(mr ? 0.4 : 0.8).add(side); dir.y = Math.max(dir.y, 0.3); dir.normalize();
   const H = renderer.domElement.clientHeight, panel = document.getElementById("editPanel");
   const cover = H - panel.getBoundingClientRect().top + 12, top = innerWidth <= 760 ? 96 : 76;
   const freeFrac = Math.max(0.35, (H - cover - top) / H);
@@ -3490,6 +3498,7 @@ function updateSwap(dt) {
       fxRing(s.getWorldPosition(V3()), 0.5, 0xf3e2c0, 0.4);
     }
     swapAnim = null;
+    if (edit) focusOn(resolvePath(edit.path));   // 新しいパーツの大きさに合わせて寄り直す
   }
 }
 // --- 押す・乗せる ---
