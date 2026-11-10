@@ -3362,7 +3362,7 @@ function choose(c, force) {
   edit.choice = c; edit.changed = c.id !== edit.cur; edit.rot = 0;
   edit.sock = sock; showRing(sock);
   dimOthers();
-  setTimeout(() => { if (edit) focusOn(resolvePath(edit.path)); }, 320);   // 新しいパーツの大きさに合わせて寄り直す
+  setTimeout(() => { if (edit && !swapAnim) focusOn(resolvePath(edit.path)); else if (edit) setTimeout(() => edit && focusOn(resolvePath(edit.path)), 300); }, 420);   // 新しいパーツの大きさに合わせて寄り直す
   phys = null;
   if (fresh.length) swapAnim = { t: 0, fresh };
   document.querySelectorAll("#editCards .swapCard").forEach(b => b.classList.toggle("sel", b.dataset.id === c.id));
