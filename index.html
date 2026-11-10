@@ -94,6 +94,40 @@
     text-align: center; max-width: 60vw; }
   [hidden] { display: none !important; }
 
+  /* 付け替えだけの画面（?swap） */
+  body.swapMode .side, body.swapMode .buildTools { display: none !important; }
+  body.swapMode .title { font-size: 26px; }
+  body.swapMode .title small { font-size: 14px; margin-top: 4px; }
+  body.trayOpen .status { bottom: 230px; }
+  .swapTray { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 6; width: min(640px, calc(100vw - 32px));
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 16px; padding: 14px 16px 16px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.5); animation: trayIn .18s ease-out; }
+  @keyframes trayIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .swapHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .swapHead b { font-size: 16px; display: block; }
+  .swapHead .sub { font-size: 12px; color: var(--muted); }
+  .swapCards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .swapCard { position: relative; display: flex; flex-direction: column; gap: 2px; font: inherit; color: var(--ink); text-align: left;
+    background: #31363c; border: 1px solid var(--panel-edge); border-radius: 12px; padding: 6px 6px 8px; cursor: pointer;
+    transition: transform .12s ease-out, border-color .12s; }
+  .swapCard:hover { border-color: var(--muted); transform: translateY(-2px); }
+  .swapCard:focus-visible { outline: 2px solid var(--circle); outline-offset: 2px; }
+  .swapCard.now { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset; }
+  .swapCard img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 8px; background: #2a2e33; }
+  .swapCard b { font-size: 13px; margin-top: 4px; }
+  .swapCard span { font-size: 11px; color: var(--muted); }
+  .swapCard i { position: absolute; top: 10px; left: 10px; font-style: normal; font-size: 10px; font-weight: 700; color: #1d2023;
+    background: var(--ink); border-radius: 999px; padding: 1px 7px; }
+  @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } .swapCard { transition: none; } }
+  @media (max-width: 760px) {
+    body.swapMode #view { height: 100vh; height: 100dvh; }
+    body.swapMode .title { font-size: 20px; }
+    body.trayOpen .themes { display: none; }
+    .swapTray { bottom: 12px; padding: 12px; }
+    .swapCards { gap: 6px; }
+    body.swapMode .status, body.swapMode.trayOpen .status { top: 58px; bottom: auto; max-width: 92vw; }
+  }
+
   /* 組み立て：パーツ置き場（11/10 改） */
   .libHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .linkBtn { font: inherit; font-size: 12px; color: var(--circle); background: none; border: 0; padding: 0; cursor: pointer; }
@@ -2027,8 +2061,9 @@ function ownMeshes(inst) {
 function setOutline() {
   for (const it of olItems) olScene.remove(it.proxy);
   olItems.length = 0;
-  if (curMode !== "build") return;
   const add = (inst, mat) => { for (const m of ownMeshes(inst)) { const p = new THREE.Mesh(m.geometry, mat); p.matrixAutoUpdate = false; p.frustumCulled = false; olScene.add(p); olItems.push({ src: m, proxy: p }); } };
+  if (swapMode) { if (swapSel) swapSel.forEach(i => add(i, olSelMat)); else if (swapHov) swapHov.forEach(i => add(i, olHovMat)); return; }
+  if (curMode !== "build") return;
   if (hovInst && hovInst !== selected && !drag) add(hovInst, olHovMat);
   if (selected && insts.includes(selected)) add(selected, olSelMat);
 }
@@ -2041,7 +2076,7 @@ function sizeOutline() {
 }
 sizeOutline();
 function renderOutline() {
-  if (!olItems.length || curMode !== "build") return;
+  if (!olItems.length || (curMode !== "build" && !swapMode)) return;
   let any = false;
   for (const it of olItems) {
     let vis = true; for (let o = it.src; o; o = o.parent) if (!o.visible) { vis = false; break; }
@@ -2161,6 +2196,7 @@ fetch("parts.json").then(r => r.json()).then(async lib => {
   makeThumbs();
   restoreSaved();
   showPanel();
+  if (swapMode) initSwap();
 }).catch(err => { console.error(err); });
 
 // ============ テスト部屋 ============
@@ -2945,12 +2981,218 @@ document.getElementById("panelToggle").addEventListener("click", e => {
   fitView();
 });
 window.__rs = { scene, camera, renderer, insts, buildGroup, controls, buildRecipe, setRun, swapTool, startMove, randomBuild, startAutoMove, stopAutoMove, setMode, planAutoMotion, checkOverlaps, tunePlan, lowestY, updateAutoMove, physUpdate, resetBody, getPhys: () => phys, getPlan: () => autoMove, pickGait, RECIPES, buildMultiLeg, roleMapWeb, startJsonMove, stopJsonMove, updateJsonMove, getJsonMove: () => jsonMove, jsonAnims, fxUpdate, renderShaken, fxEvent };  // 確認用
+// ============ 付け替えだけの画面（?swap。11/10 試作） ============
+// 審査員が最初の30秒でやること：動いているロボットの脚を押す → 別の脚を選ぶ → カチッと付いて、そのまま新しい脚で歩く。
+// 見せたいのは「同じ接続口（六角M）なら、形も大きさも違う脚がそのまま付いて、歩き方は脚の長さから自動で決まる」こと。
+const swapMode = new URLSearchParams(location.search).has("swap");
+let swapSel = null, swapHov = null, swapAnim = null, trayOpen = false;
+const LEG_SETS = [
+  { id: "basic", label: "標準の脚", note: "ひざと足首", chain: ["Leg"] },
+  { id: "wheel", label: "車輪の脚", note: "足の代わりに車輪", chain: ["LegWheel"] },
+  { id: "golem", label: "ゴーレムの脚", note: "太もも・すね・足の3つ", chain: ["GolemThigh", "GolemShin", "GolemFoot"] },
+  { id: "boss", label: "番人の脚", note: "太もも・すね・足の3つ", chain: ["BossThigh", "BossShin", "BossFoot"] },
+];
+function legSockets() {
+  const hip = insts.find(i => /Hip$/.test(i.key));
+  return hip ? hip.sockets.filter(s => s.userData.rs.shape === "HEX" && s.userData.rs.size === "M") : [];
+}
+function legRoots() { return legSockets().map(s => s.userData.rs.partner && s.userData.rs.partner.userData.rs.inst).filter(Boolean); }
+function legTree() { const set = new Set(); for (const r of legRoots()) for (const i of subtreeInsts(r)) set.add(i); return set; }
+function currentLegSet() { const r = legRoots()[0]; return r ? LEG_SETS.find(L => L.chain[0] === r.key) || null : null; }
+function attachRaw(target, key) {   // 人の操作と同じ決まり（合う口・一番正面を向くひねり）で、表示や記録はせずにつなぐ
+  const inst = instantiate(key), want = target.userData.rs;
+  const cands = inst.sockets.filter(s => !s.userData.rs.partner && s.userData.rs.shape === want.shape && s.userData.rs.size === want.size);
+  if (!cands.length) { removeInst(inst); return null; }
+  inst.target = target; target.add(inst.root);
+  let own = cands[0], bs = -Infinity;
+  for (const c of cands) { inst.own = c; const sc = autoRoll(inst); if (sc > bs + 1e-6) { bs = sc; own = c; } }
+  inst.own = own; autoRoll(inst);
+  target.userData.rs.partner = own; own.userData.rs.partner = target;
+  return inst;
+}
+function attachChain(target, chain) {   // 太もも→すね→足のように、前のパーツの空いた口へ順につなぐ
+  let first = null, prev = null, t = target;
+  for (const key of chain) {
+    if (prev) { const p = probeOf(key); t = prev.sockets.find(s => !s.userData.rs.partner && checkLink(s, p).socket); if (!t) break; }
+    const inst = attachRaw(t, key);
+    if (!inst) break;
+    first = first || inst; prev = inst;
+  }
+  return first;
+}
+function renderThumbOf(obj) {
+  obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  const dir = new THREE.Vector3(0.75, 0.35, 1).normalize();
+  thumbCam.position.copy(c).addScaledVector(dir, r / Math.sin(THREE.MathUtils.degToRad(14)) * 1.02);
+  thumbCam.lookAt(c); thumbCam.near = r * 0.1; thumbCam.far = r * 20; thumbCam.updateProjectionMatrix();
+  thumbR.render(thumbScene, thumbCam);
+  return thumbR.domElement.toDataURL("image/png");
+}
+function makeSetThumbs() {   // 脚のセットは、つないだ形のまま描く
+  for (const set of LEG_SETS) {
+    if (!set.chain.every(k => templates[k])) continue;
+    const root = instantiate(set.chain[0]);
+    thumbScene.add(root.root);
+    let prev = root;
+    for (const key of set.chain.slice(1)) {
+      const t = prev.sockets.find(s => !s.userData.rs.partner && checkLink(s, probeOf(key)).socket);
+      if (!t) break;
+      prev = attachRaw(t, key) || prev;
+    }
+    set.thumb = renderThumbOf(root.root);
+    removeInst(root); thumbScene.remove(root.root);
+  }
+  document.querySelectorAll(".swapCard img[data-set]").forEach(im => { const s = LEG_SETS.find(x => x.id === im.dataset.set); if (s && s.thumb) im.src = s.thumb; });
+}
+
+function initSwap() {
+  document.body.classList.add("swapMode");
+  fitView();   // スマホ：3D を画面いっぱいにする
+  document.querySelector(".title").innerHTML = "ロボット規格<small>脚をクリックして、別の脚に替えてみてください</small>";
+  const tray = document.createElement("div"); tray.className = "swapTray"; tray.id = "swapTray"; tray.hidden = true;
+  tray.innerHTML = `<div class="swapHead"><div><b>脚を替える</b><span class="sub">どれも同じ <span class="sockettag" style="background:${SHAPE_CSS.HEX}">六角M</span> の口につながります</span></div>
+    <button class="linkBtn" type="button" id="swapClose">閉じる</button></div><div class="swapCards" id="swapCards"></div>`;
+  document.body.appendChild(tray);
+  document.getElementById("swapClose").addEventListener("click", closeTray);
+  document.getElementById("testWalk").checked = false;   // その場で歩く（押しやすく、比べやすい）
+  setMode("test");
+  buildRecipe("human");
+  startAutoMove();
+  makeSetThumbs();
+  setTimeout(frameSwap, 400);
+  status.textContent = "脚をクリックすると、付け替えられる脚が出ます";
+}
+function openTray() {
+  const box = document.getElementById("swapCards"); box.innerHTML = "";
+  const cur = currentLegSet();
+  for (const set of LEG_SETS) {
+    if (!set.chain.every(k => templates[k])) continue;
+    const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (cur && cur.id === set.id ? " now" : "");
+    b.innerHTML = `<img alt="" data-set="${set.id}" src="${set.thumb || ""}"><b>${set.label}</b><span>${set.note}</span>${cur && cur.id === set.id ? '<i>今の脚</i>' : ""}`;
+    b.addEventListener("click", () => doSwap(set));
+    box.appendChild(b);
+  }
+  document.getElementById("swapTray").hidden = false;
+  document.body.classList.add("trayOpen");
+  trayOpen = true; swapSel = [...legTree()]; swapHov = null; setOutline();
+  requestAnimationFrame(frameSwap);
+  status.textContent = "どの脚に替えても、そのまま歩きます";
+}
+function closeTray() {
+  document.getElementById("swapTray").hidden = true;
+  document.body.classList.remove("trayOpen");
+  trayOpen = false; swapSel = null; setOutline();
+  frameSwap();
+}
+// カメラ：ロボット全体が、トレイに隠れない上の空きに収まるように寄せる（なめらかに）
+let camTween = null;
+function frameSwap() {
+  buildGroup.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(buildGroup); if (box.isEmpty()) return;
+  const H = renderer.domElement.clientHeight;
+  const tray = document.getElementById("swapTray");
+  const cover = trayOpen && tray ? H - tray.getBoundingClientRect().top + 16 : 0;   // 下から隠れる高さ（px）
+  const top = innerWidth <= 760 ? 120 : 70;                                          // 上の見出し（スマホは説明文も）のぶん
+  const freeFrac = Math.max(0.35, (H - cover - top) / H);
+  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const half = THREE.MathUtils.degToRad(camera.fov / 2);
+  const need = Math.max(size.y, size.x / camera.aspect, size.z / camera.aspect) * 1.12;
+  const dist = Math.max(4, need / 2 / Math.tan(half) / freeFrac);
+  const viewH = 2 * dist * Math.tan(half);
+  const shift = viewH * ((cover - top) / 2) / H;   // 空きの真ん中に来るよう、注目点を下げる（見出しのぶん上は少し戻す）
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  const target = c.clone(); target.y -= shift;
+  camTween = { t: 0, ft: controls.target.clone(), fp: camera.position.clone(), tt: target, tp: target.clone().addScaledVector(dir, dist) };
+}
+function updateCam(dt) {
+  if (!camTween) return;
+  camTween.t = Math.min(1, camTween.t + dt / 0.5);
+  const k = 1 - Math.pow(1 - camTween.t, 3);
+  controls.target.lerpVectors(camTween.ft, camTween.tt, k);
+  camera.position.lerpVectors(camTween.fp, camTween.tp, k);
+  if (camTween.t >= 1) camTween = null;
+}
+function markNow(id) {
+  document.querySelectorAll(".swapCard").forEach(c => {
+    const on = c.querySelector("img").dataset.set === id;
+    c.classList.toggle("now", on);
+    const badge = c.querySelector("i");
+    if (on && !badge) c.insertAdjacentHTML("beforeend", "<i>今の脚</i>");
+    if (!on && badge) badge.remove();
+  });
+}
+const backOut = k => { const s = 1.9; k -= 1; return k * k * ((s + 1) * k + s) + 1; };
+function doSwap(set) {
+  if (swapAnim) return;
+  const cur = currentLegSet();
+  if (cur && cur.id === set.id) { closeTray(); return; }
+  const socks = legSockets(); if (!socks.length) return;
+  stopAutoMove();
+  const falling = [];
+  for (const r of legRoots()) {
+    r.target.userData.rs.partner = null; r.own.userData.rs.partner = null;
+    scene.attach(r.root); r.target = null; setGhost(r, true); falling.push(r);
+  }
+  const fresh = socks.map(s => attachChain(s, set.chain)).filter(Boolean);
+  for (const f of fresh) { f.root.userData.s1 = f.root.scale.clone(); f.root.scale.setScalar(0.001); }
+  phys = null;
+  swapAnim = { t: 0, falling, fresh, set, landed: false };
+  swapSel = [...legTree()]; setOutline();
+  markNow(set.id);
+}
+function updateSwap(dt) {
+  updateCam(dt);
+  const a = swapAnim; if (!a) return;
+  a.t += dt;
+  for (const r of a.falling) { r.root.position.y -= dt * (1.5 + a.t * 14); r.root.rotateX(dt * 2.2); }
+  const k = Math.min(1, a.t / 0.3), e = Math.max(0.001, backOut(k));
+  for (const f of a.fresh) f.root.scale.copy(f.root.userData.s1).multiplyScalar(e);
+  if (!a.landed && k >= 1) {
+    a.landed = true;
+    for (const f of a.fresh) f.root.scale.copy(f.root.userData.s1);
+    startAutoMove();
+    buildGroup.updateMatrixWorld(true);
+    for (const f of a.fresh) {
+      const b = new THREE.Box3().setFromObject(f.root), c = b.getCenter(new THREE.Vector3());
+      fxRing(new THREE.Vector3(c.x, b.min.y + 0.05, c.z), 0.55, 0xf3e2c0, 0.5);
+      fxDust(new THREE.Vector3(c.x, b.min.y + 0.05, c.z), 8, 0.5, 0.35);
+    }
+    fxShake(0.04, 0.18);
+    const g = autoMove && autoMove.gp;
+    status.textContent = `${a.set.label}に替えました。` + (g ? `脚 ${g.L.toFixed(2)}m → 歩幅 ${g.lam.toFixed(2)}m・1歩 ${(g.T / 2).toFixed(2)}秒（脚の長さから式で決定）` : "そのまま動きます");
+  }
+  if (a.t > 0.7) { for (const r of a.falling) removeInst(r); swapAnim = null; if (trayOpen) { swapSel = [...legTree()]; setOutline(); } setTimeout(frameSwap, 250); }
+}
+// 押す・乗せる（付け替え画面だけ）
+let swapDown = null;
+view.addEventListener("pointerdown", e => { if (swapMode && e.button === 0) swapDown = [e.clientX, e.clientY]; });
+addEventListener("pointerup", e => {
+  if (!swapMode || !swapDown) return;
+  const d = Math.hypot(e.clientX - swapDown[0], e.clientY - swapDown[1]); swapDown = null;
+  if (d > 6 || !overCanvas(e)) return;
+  const inst = pickPart(e);
+  if (inst && legTree().has(inst)) openTray(); else if (trayOpen) closeTray();
+});
+addEventListener("pointermove", e => {
+  if (!swapMode || e.buttons || e.pointerType !== "mouse" || trayOpen) return;
+  const inst = overCanvas(e) ? pickPart(e) : null;
+  const on = !!(inst && legTree().has(inst));
+  const was = !!swapHov;
+  swapHov = on ? [...legTree()] : null;
+  if (on !== was) setOutline();
+  renderer.domElement.style.cursor = on ? "pointer" : "";
+});
+addEventListener("keydown", e => { if (swapMode && e.key === "Escape" && trayOpen) closeTray(); });
+
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   for (const mx of mixers) mx.update(dt);
   updateTracks(dt);
   updateMove(dt);
-  if (!window.__rsManual) { updateJsonMove(dt); updateAutoMove(dt); physUpdate(dt); }   // __rsManual：確認用にコマ送りするとき
+  updateSwap(dt);
+  if (!window.__rsManual && !swapAnim) { updateJsonMove(dt); updateAutoMove(dt); physUpdate(dt); }   // __rsManual：確認用にコマ送りするとき
   updateShots(dt);
   if (!window.__rsManual) fxUpdate(dt);   // コマ送りの確認中は、確認側が進める
   controls.update();
