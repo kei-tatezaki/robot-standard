@@ -1740,7 +1740,7 @@ function makeThumbs() {
   const si = $("selThumb"); if (si && selected) si.src = templates[selected.key].thumb || "";
 }
 let thumbTimer = 0;
-window.__onTheme = () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(() => { if (Object.keys(templates).length) makeThumbs(); }, 600); };
+window.__onTheme = () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(() => { if (Object.keys(templates).length) { makeThumbs(); if (swapMode && !edit) makeSetThumbs(); } }, 600); };
 THREE.DefaultLoadingManager.onLoad = () => window.__onTheme();   // テクスチャが読み終わったら描き直す
 
 // --- 置き場 ---
@@ -3445,8 +3445,9 @@ function focusOn(sock) {   // つく場所へ寄る。つけたパーツが入�
   box.expandByPoint(p);
   const c = box.getCenter(V3()), rad = Math.max(0.6, box.getSize(V3()).length() / 2);
   const core = insts.find(i => !i.target).root.getWorldPosition(V3());
-  const out = p.clone().sub(core); out.y *= 0.4; if (out.lengthSq() < 1e-4) out.set(0, 0, 1); out.normalize();
-  const dir = out.multiplyScalar(0.8).add(new THREE.Vector3(0.25, 0.35, 1).normalize()).normalize();
+  // 口の外側（横方向だけ）から。下向きの口（腰）でも床の下へ回り込まないよう、いつも少し上から見る
+  const out = p.clone().sub(core); out.y = 0; if (out.lengthSq() < 0.01) out.set(0, 0, 1); out.normalize();
+  const dir = out.multiplyScalar(0.8).add(new THREE.Vector3(0.25, 0.35, 1).normalize()); dir.y = Math.max(dir.y, 0.3); dir.normalize();
   const H = renderer.domElement.clientHeight, panel = document.getElementById("editPanel");
   const cover = H - panel.getBoundingClientRect().top + 12, top = innerWidth <= 760 ? 96 : 76;
   const freeFrac = Math.max(0.35, (H - cover - top) / H);
