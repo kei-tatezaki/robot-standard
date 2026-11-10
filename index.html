@@ -94,6 +94,44 @@
     text-align: center; max-width: 60vw; }
   [hidden] { display: none !important; }
 
+  /* 組み立て：パーツ置き場（11/10 改） */
+  .libHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .linkBtn { font: inherit; font-size: 12px; color: var(--circle); background: none; border: 0; padding: 0; cursor: pointer; }
+  .cats { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-top: 8px; scrollbar-width: thin; }
+  .cat { flex: 0 0 auto; font: inherit; font-size: 12px; color: var(--muted); background: none; border: 1px solid var(--panel-edge);
+    border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+  .cat[aria-selected="true"] { color: #1d2023; background: var(--ink); border-color: var(--ink); font-weight: 700; }
+  .cat .n { opacity: .6; margin-left: 3px; font-size: 11px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .card { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 2px; font: inherit; color: var(--ink);
+    background: #31363c; border: 1px solid var(--panel-edge); border-radius: 10px; padding: 4px 4px 6px; cursor: grab;
+    text-align: left; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  .card:hover { border-color: var(--muted); }
+  .card:focus-visible { outline: 2px solid var(--circle); outline-offset: 2px; }
+  .card.armed { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset; }
+  .card[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+  .card img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: #2a2e33; pointer-events: none; }
+  .card .nm { font-size: 11px; line-height: 1.35; font-weight: 700; padding: 0 2px; overflow: hidden; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.7em; }
+  .card .dots { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 2px; }
+  .card .dots i { font-style: normal; font-size: 10px; line-height: 1; padding: 2px 4px; border-radius: 999px; color: #1d2023; font-weight: 700; }
+  .dragGhostCard { position: fixed; z-index: 50; pointer-events: none; width: 64px; height: 64px; border-radius: 10px;
+    border: 1px solid var(--ink); background: #31363c center/contain no-repeat; opacity: .9; transform: translate(-50%, -50%); }
+  body.dragging, body.dragging * { cursor: grabbing !important; }
+  body.dropDelete .side { outline: 2px dashed var(--warn); outline-offset: -6px; }
+  .keys { font-size: 11px; color: var(--muted); margin: 10px 0 0; line-height: 2; }
+  kbd { font: inherit; font-size: 11px; padding: 1px 5px; border: 1px solid var(--panel-edge); border-bottom-width: 2px; border-radius: 4px;
+    background: #31363c; color: var(--ink); }
+  .howto { font-size: 12px; color: var(--muted); margin: 6px 0 0; padding-left: 1.2em; }
+  .howto li + li { margin-top: 4px; }
+  .howto b { color: var(--ink); }
+  .buildTools { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 5; }
+  .tool { font: inherit; font-size: 12px; color: var(--ink); background: rgba(39,43,48,.9); border: 1px solid var(--panel-edge);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  .tool:hover:not([disabled]) { border-color: var(--muted); }
+  .tool[disabled] { opacity: .4; cursor: default; }
+  .tool:focus-visible { outline: 2px solid var(--circle); outline-offset: 2px; }
+
   @media (max-width: 760px) {
     .title { left: 16px; top: 12px; }
     /* スマホ：上に3D、下にパネルと世界観（11/10） */
@@ -112,6 +150,8 @@
     .status { bottom: auto; top: calc(50vh - 52px); top: calc(50dvh - 52px); max-width: 92vw; font-size: 12px; }
     body.panel-min .status { top: calc(100vh - 256px); top: calc(100dvh - 256px); }
     .side .panelToggle { display: block; }
+    .buildTools { top: 46px; }
+    .cards { grid-template-columns: repeat(4, 1fr); }
     .title small { display: none; }
   }
   .panelToggle { display: none; width: 100%; font: inherit; font-size: 12px; color: var(--muted); background: none;
@@ -158,14 +198,13 @@
   </div>
 
   <div id="paneBuild" hidden>
-    <section id="buildStart">
-      <h2>はじめに置くコア</h2>
-      <div class="picks" id="corePicks"></div>
-    </section>
-    <section id="buildPick" hidden>
-      <h2>この接続口につなぐ</h2>
-      <p class="note" id="pickTarget"></p>
-      <div class="picks" id="partPicks"></div>
+    <section id="lib">
+      <div class="libHead"><h2 id="libTitle">パーツ</h2><button class="linkBtn" id="libClear" type="button" hidden>選ぶのをやめる</button></div>
+      <p class="note" id="libHint"></p>
+      <div class="cats" id="cats" role="tablist" aria-label="パーツの種類"></div>
+      <div class="cards" id="cards"></div>
+      <p class="note" id="libCount"></p>
+      <label class="toggle" id="showAllWrap" hidden><input type="checkbox" id="showAll"> つなげないパーツも表示する</label>
     </section>
     <section id="buildSel" hidden>
       <h2 id="selName">選んだパーツ</h2>
@@ -176,10 +215,17 @@
       </div>
       <p class="note" id="twistNote"></p>
       <div class="anims" id="selAnims" style="margin-top:10px"></div>
+      <p class="keys"><kbd>R</kbd> ひねる <kbd>Shift</kbd>+<kbd>R</kbd> 逆にひねる <kbd>Delete</kbd> 外す <kbd>Esc</kbd> 選ぶのをやめる</p>
     </section>
     <section>
       <h2>遊び方</h2>
-      <p class="note">光っている接続口をクリックすると、つなげるパーツが出ます。形と大きさが両方そろった接続口だけがつながります。パーツをクリックすると、ひねる・外す・動作の再生ができます。</p>
+      <ul class="howto">
+        <li>置き場のパーツを、ロボットの光っている接続口へ<b>ドラッグ</b>してつなぎます（クリックで選んでから接続口をクリックしても同じ）。</li>
+        <li>形と大きさが両方そろう接続口だけが光ります。つなげないパーツは置き場に出ません。</li>
+        <li>付いているパーツは<b>ドラッグで付け替え</b>られます。パネルの上で離すと外れます。</li>
+        <li>パーツを<b>クリックで選ぶ</b>と白い縁が付き、ひねる・外す・動作の再生ができます。</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> で元に戻す、<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> でやり直す。<kbd>F</kbd> で全体を映す。</li>
+      </ul>
       <div class="legend"><span><i style="background:var(--circle)"></i>丸（回転自由）</span><span><i style="background:var(--square)"></i>四角（90度）</span><span><i style="background:var(--hex)"></i>六角（60度）</span></div>
       <button class="btn" id="reset" type="button" style="margin-top:12px">最初からやり直す</button>
     </section>
@@ -242,6 +288,11 @@
     </section>
   </div>
 </aside>
+<div class="buildTools" id="buildTools" hidden>
+  <button class="tool" id="undoBtn" type="button" title="元に戻す（Ctrl+Z）" disabled>↶ 元に戻す</button>
+  <button class="tool" id="redoBtn" type="button" title="やり直す（Ctrl+Shift+Z）" disabled>↷ やり直す</button>
+  <button class="tool" id="frameBtn" type="button" title="全体を映す（F）">全体を映す</button>
+</div>
 <p class="status" id="status">読み込み中…</p>
 
 <script type="module">
@@ -364,6 +415,8 @@ function applyTheme(id) {
     m.needsUpdate = true;
   }
   document.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === id)));
+  if (window.__ghostCache) window.__ghostCache.clear();
+  if (window.__onTheme) window.__onTheme();   // 置き場の絵を今の世界観で描き直す
 }
 const nav = document.querySelector(".themes");
 for (const [id, th] of Object.entries(THEMES)) {
@@ -639,11 +692,15 @@ function checkLink(target, inst) {
   return { socket: null, msg: (sameShape ? "大きさが違います" : "形が違います") + `（このパーツは ${have}）` };
 }
 function refreshMarks() {
+  // 光らせる接続口：ドラッグ中・パーツを選んでいるときは「そのパーツがつなげる所」だけ（11/10）
+  const only = typeof drag !== "undefined" && drag ? drag.targets : (typeof armed !== "undefined" && armed ? armedTargets : null);
   for (const inst of insts) for (const s of inst.sockets) {
     const rs = s.userData.rs;
-    rs.mark.visible = !rs.partner;
-    rs.mark.scale.setScalar(s === picked ? 1.25 : 1);
-    rs.mark.material.opacity = s === picked ? 1 : 0.8;
+    const dragging = typeof drag !== "undefined" && drag && drag.sub && drag.sub.has(inst);
+    rs.mark.visible = !rs.partner && !dragging && (!only || only.has(s));
+    const hot = s === picked || (typeof drag !== "undefined" && drag && drag.hover === s) || (typeof hovSock !== "undefined" && hovSock === s);
+    rs.mark.scale.setScalar(hot ? 1.3 : only ? 1.12 : 1);
+    rs.mark.material.opacity = hot ? 1 : 0.8;
   }
 }
 // 組み立て中は、床をロボットの一番下に合わせる
@@ -666,30 +723,11 @@ function fitGround() {
   if (d < want * 0.95 || d > want * 1.6) camera.position.copy(controls.target).add(off.setLength(want));
 }
 function showPanel() {
-  document.getElementById("buildStart").hidden = insts.length > 0;
-  const pick = document.getElementById("buildPick");
-  pick.hidden = !picked;
-  if (!picked) document.getElementById("partPicks").innerHTML = "";
-  if (picked) {
-    const rs = picked.userData.rs;
-    document.getElementById("pickTarget").innerHTML =
-      `<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span>（${picked.userData.rs.inst.label}）`;
-    const box = document.getElementById("partPicks"); box.innerHTML = "";
-    for (const [key, t] of Object.entries(templates)) {
-      const probe = { sockets: t.probe };
-      const res = checkLink(picked, probe);
-      const b = document.createElement("button"); b.type = "button";
-      b.className = "pick" + (res.socket ? "" : " no");
-      b.innerHTML = `<b>${t.label}</b><span>${res.msg}</span>`;
-      if (res.socket) b.addEventListener("click", () => attach(key));
-      else b.setAttribute("aria-disabled", "true");
-      box.appendChild(b);
-    }
-  }
+  if (typeof renderLib === "function") { if (armed) armedTargets = targetsFor(probeOf(armed)); renderLib(); }
   const sel = document.getElementById("buildSel");
   sel.hidden = !selected;
   if (selected) {
-    document.getElementById("selName").textContent = selected.label;
+    document.getElementById("selName").innerHTML = `<img id="selThumb" alt="" src="${templates[selected.key].thumb || ""}" style="width:40px;height:40px;vertical-align:middle;margin-right:8px;border-radius:6px;background:#2a2e33">${selected.label}`;
     const tw = document.getElementById("twist"), tb = document.getElementById("twistBack");
     tw.disabled = tb.disabled = !selected.own;
     let note = "最初に置いたコアです";
@@ -712,6 +750,7 @@ function showPanel() {
   }
   refreshMarks();
   fitGround();
+  if (typeof setOutline === "function") setOutline();
 }
 function attach(key) {
   const target = picked;
@@ -753,11 +792,11 @@ function placeCore(key) {
   status.textContent = "光っている接続口をクリックして、パーツをつなぎましょう";
   showPanel();
 }
-document.getElementById("twist").addEventListener("click", () => { if (selected && selected.own) twistBy(selected, 1); });
-document.getElementById("twistBack").addEventListener("click", () => { if (selected && selected.own) twistBy(selected, -1); });
+document.getElementById("twist").addEventListener("click", () => { if (selected && selected.own) { twistBy(selected, 1); commit(); } });
+document.getElementById("twistBack").addEventListener("click", () => { if (selected && selected.own) { twistBy(selected, -1); commit(); } });
 document.getElementById("remove").addEventListener("click", () => {
   if (!selected) return;
-  removeInst(selected); status.textContent = "外しました"; showPanel();
+  removeInst(selected); status.textContent = "外しました（Ctrl+Z で戻せます）"; showPanel(); commit();
 });
 function resetBuild() {
   randomBuild.rejected = 0;
@@ -769,7 +808,7 @@ document.getElementById("reset").addEventListener("click", () => {
   resetBuild(); setRun(false);
   document.getElementById("miningCtl").hidden = true;
   document.getElementById("bossCtl").hidden = true;
-  status.textContent = "はじめに置くコアを選びましょう"; showPanel();
+  status.textContent = "はじめに置くコアを選びましょう"; showPanel(); commit();
 });
 
 // 見本の組み合わせ：人がクリックするのと同じ手順（空いている接続口を選ぶ → つなぐ）で組み立てる
@@ -1451,7 +1490,7 @@ function fxUpdate(dt) {
   const a = fxShakeAmp * Math.max(0, 1 - fxShakeT / fxShakeDur) ** 2;
   fxShakeOff.set((Math.random() - 0.5) * 2 * a, (Math.random() - 0.5) * 2 * a * 1.3, (Math.random() - 0.5) * 2 * a);
 }
-function renderShaken() { camera.position.add(fxShakeOff); renderer.render(scene, camera); camera.position.sub(fxShakeOff); }
+function renderShaken() { camera.position.add(fxShakeOff); renderer.render(scene, camera); renderOutline(); camera.position.sub(fxShakeOff); }
 function updateJsonMove(dt) {
   if (!jsonMove) return;
   if (jsonMove.freeze > 0) { jsonMove.freeze -= dt; return; }   // ヒットストップ：当たった瞬間に少しだけ止める
@@ -1514,45 +1553,614 @@ function finishRecipe(r) {
   document.getElementById("miningCtl").hidden = r !== RECIPES.mining;
   document.getElementById("golemCtl").hidden = true;
   document.getElementById("bossCtl").hidden = true;
-  status.textContent = `${r.label}を組み立てました（パーツ ${insts.length - 1}個）。パーツをクリックすると、ひねる・外す・動作の再生ができます`;
+  status.textContent = `${r.label}を組み立てました（パーツ ${insts.length - 1}個）。パーツはドラッグで付け替え、クリックで選べます`;
   showPanel();
+  if (typeof commit === "function" && hi >= 0) commit();
 }
 document.querySelectorAll("#recipes [data-recipe]").forEach(b => b.addEventListener("click", () => buildRecipe(b.dataset.recipe)));
 
 // クリック：接続口の印 → つなぐパーツを選ぶ / パーツ → 選ぶ
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
-let downAt = null;
-renderer.domElement.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener("pointerup", e => {
-  if (!buildGroup.visible || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+// ============ 組み立ての操作（11/10 改：種類別の置き場・ドラッグ・白い縁・元に戻す） ============
+// 決めたこと：
+//  ・置き場には「今のロボットにつなげるパーツ」だけを出す（つなげないものは隠す。必要なら表示できる）
+//  ・つなぎ方は2通り：置き場からロボットへドラッグ／パーツを選んでから光っている接続口をクリック
+//  ・付いているパーツはドラッグで付け替え。パネルの上で離すと外す
+//  ・選んだパーツは白い縁、マウスを乗せたパーツは薄い縁（面ではなく縁だけ。形が見えなくならないように）
+//  ・ロボットは「コア → 接続口の番号 → パーツ」の木で覚える。元に戻す・自動保存・読み込みはこの木を使う
+let curMode = "view";
+const CATS = [["all", "すべて"], ["core", "コア"], ["head", "頭"], ["body", "胴・つなぎ"], ["arm", "腕"], ["hand", "手"],
+  ["leg", "脚"], ["move", "足・移動"], ["tool", "道具"]];
+const CAT_OF = {
+  Head: "head", GolemHead: "head", GolemHeadEye: "head", BossHead: "head",
+  BossChest: "body", Spine: "body", Link_L: "body", Link_M: "body", UpperUnit: "body", Hip: "body", BossHip: "body",
+  Shoulder: "arm", BossShoulder: "arm", Arm: "arm", ArmBlade: "arm", BossUpperArm: "arm", BossUpperArmB: "arm",
+  BossForearm: "arm", BossForearmB: "arm", GolemUpperArm: "arm", GolemForearm: "arm", GolemArm: "arm",
+  BossFist: "hand", BossPalm: "hand", GolemFist: "hand",
+  Leg: "leg", GolemThigh: "leg", GolemShin: "leg", BossThigh: "leg", BossShin: "leg", GolemLeg: "leg",
+  GolemFoot: "move", BossFoot: "move", LegWheel: "move", Crawler: "move",
+  Pickaxe: "tool", Sword: "tool",
+};
+function catOf(key) {
+  const t = templates[key];
+  if (t.cat) return t.cat;                     // parts.json に種類が書いてあればそれを使う
+  if (t.kind === "core") return "core";
+  if (CAT_OF[key]) return CAT_OF[key];
+  const k = key.toLowerCase();                 // 新しいパーツは名前から推す
+  if (/head/.test(k)) return "head";
+  if (/hand|fist|palm/.test(k)) return "hand";
+  if (/arm|shoulder|elbow/.test(k)) return "arm";
+  if (/foot|wheel|crawler|track/.test(k)) return "move";
+  if (/leg|thigh|shin/.test(k)) return "leg";
+  if (/sword|axe|tool|gun|drill/.test(k)) return "tool";
+  return "body";
+}
+const isOld = key => /^（旧）/.test(templates[key].label);
+let libCat = "all";
+let armed = null;            // 置き場で選んだパーツ（次に光っている接続口をクリックすると、それをつなぐ）
+let hovInst = null;          // マウスが乗っているパーツ
+let hovSock = null;          // マウスが乗っている接続口
+let drag = null, press = null;
+const $ = id => document.getElementById(id);
+const sockTag = rs => `<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span>`;
+
+// --- つなげる場所を調べる ---
+const probeOf = key => ({ sockets: templates[key].probe });
+function subtreeInsts(inst) {
+  const set = new Set([inst]);
+  inst.root.traverse(o => { if (o.userData.inst) set.add(o.userData.inst); });
+  return set;
+}
+function targetsFor(part, skip) {   // part：つなぐもの（inst か probe）。skip：調べない inst（自分と、自分に付いているもの）
+  const out = new Set();
+  for (const inst of insts) {
+    if (skip && skip.has(inst)) continue;
+    if (drag && inst === drag.inst) continue;
+    for (const s of inst.sockets) if (!s.userData.rs.partner && checkLink(s, part).socket) out.add(s);
+  }
+  return out;
+}
+function cardFits(key) {
+  if (!insts.length) return templates[key].kind === "core";
+  if (picked) return !!checkLink(picked, probeOf(key)).socket;
+  return targetsFor(probeOf(key)).size > 0;
+}
+let armedTargets = new Set();
+function setArmed(key) {
+  armed = key;
+  armedTargets = key && insts.length ? targetsFor(probeOf(key)) : new Set();
+  if (key) { picked = null; }
+}
+
+// --- パーツの絵（置き場のサムネイル）。今の世界観で描く ---
+const thumbR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+thumbR.setPixelRatio(1); thumbR.setSize(128, 128);
+thumbR.outputColorSpace = THREE.SRGBColorSpace; thumbR.toneMapping = THREE.NeutralToneMapping; thumbR.toneMappingExposure = 1.3;
+const thumbScene = new THREE.Scene();
+thumbScene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2622, 1.2));
+{ const k = new THREE.DirectionalLight(0xffffff, 2.4); k.position.set(3, 5, 4); thumbScene.add(k);
+  const r2 = new THREE.DirectionalLight(0x9fb6ff, 1.4); r2.position.set(-4, 2, -3); thumbScene.add(r2); }
+const thumbCam = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
+function makeThumbs() {
+  for (const [key, t] of Object.entries(templates)) {
+    const holder = t.gltf.scene.clone(true);
+    useSlotMats(holder);
+    thumbScene.add(holder);
+    holder.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(holder);
+    if (box.isEmpty()) { thumbScene.remove(holder); continue; }
+    const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+    const dir = new THREE.Vector3(0.75, 0.55, 1).normalize();   // 斜め前の上から（パーツの前は +Z）
+    thumbCam.position.copy(c).addScaledVector(dir, r / Math.sin(THREE.MathUtils.degToRad(14)) * 1.02);
+    thumbCam.lookAt(c); thumbCam.near = r * 0.1; thumbCam.far = r * 20; thumbCam.updateProjectionMatrix();
+    thumbR.render(thumbScene, thumbCam);
+    t.thumb = thumbR.domElement.toDataURL("image/png");
+    thumbScene.remove(holder);
+  }
+  document.querySelectorAll(".card img[data-key]").forEach(im => { const t = templates[im.dataset.key]; if (t && t.thumb) im.src = t.thumb; });
+  const si = $("selThumb"); if (si && selected) si.src = templates[selected.key].thumb || "";
+}
+let thumbTimer = 0;
+window.__onTheme = () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(() => { if (Object.keys(templates).length) makeThumbs(); }, 600); };
+THREE.DefaultLoadingManager.onLoad = () => window.__onTheme();   // テクスチャが読み終わったら描き直す
+
+// --- 置き場 ---
+function renderCats() {
+  const box = $("cats"); box.innerHTML = "";
+  const empty = !insts.length, showAll = $("showAll").checked;
+  for (const [id, name] of CATS) {
+    const keys = Object.keys(templates).filter(k => !isOld(k) && (id === "all" || catOf(k) === id));
+    const n = keys.filter(k => showAll || cardFits(k)).length;
+    if (id !== "all" && n === 0 && !showAll) continue;   // つなげるものが無い種類は出さない
+    const b = document.createElement("button"); b.type = "button"; b.className = "cat"; b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(libCat === id));
+    b.innerHTML = `${name}<span class="n">${n}</span>`;
+    b.addEventListener("click", () => { libCat = id; renderLib(); });
+    box.appendChild(b);
+  }
+  if (![...box.children].some(b => b.getAttribute("aria-selected") === "true")) { libCat = "all"; box.firstChild && box.firstChild.setAttribute("aria-selected", "true"); }
+  void empty;
+}
+function renderLib() {
+  if (!Object.keys(templates).length) return;
+  renderCats();
+  const box = $("cards"); box.innerHTML = "";
+  const empty = !insts.length, showAll = $("showAll").checked;
+  let shown = 0, hidden = 0;
+  for (const key of Object.keys(templates)) {
+    if (isOld(key)) continue;
+    if (libCat !== "all" && catOf(key) !== libCat) continue;
+    const t = templates[key];
+    const fits = cardFits(key);
+    if (!fits && !showAll) { hidden++; continue; }
+    shown++;
+    const b = document.createElement("button"); b.type = "button"; b.className = "card" + (armed === key ? " armed" : "");
+    b.dataset.key = key;
+    const kinds = [...new Set(t.probe.map(s => s.userData.rs.shape + "|" + s.userData.rs.size))];
+    b.innerHTML = `<img alt="" data-key="${key}" src="${t.thumb || ""}"><span class="nm">${t.label}</span>` +
+      `<span class="dots">${kinds.map(k => { const [sh, sz] = k.split("|"); return `<i style="background:${SHAPE_CSS[sh]}">${SHAPE_LABEL[sh]}${sz}</i>`; }).join("")}</span>`;
+    if (!fits) {
+      b.setAttribute("aria-disabled", "true");
+      b.title = picked ? checkLink(picked, probeOf(key)).msg : empty ? "はじめはコアを置きます" : "今のロボットには、合う空きの接続口がありません";
+    } else {
+      b.title = empty ? "クリックかドラッグで置きます" : "ロボットへドラッグするか、クリックで選んでから接続口をクリック";
+      b.addEventListener("pointerdown", e => onCardDown(e, key));
+      b.addEventListener("click", e => { if (b.dataset.dragged) { delete b.dataset.dragged; return; } onCardClick(key); });
+    }
+    box.appendChild(b);
+  }
+  // 見出しと説明
+  const title = $("libTitle"), hint = $("libHint");
+  if (empty) { title.textContent = "はじめに置くコア"; hint.textContent = "コアをクリックするか、画面へドラッグして置きます。"; }
+  else if (picked) { title.innerHTML = `${sockTag(picked.userData.rs)} につなげるパーツ`; hint.textContent = `${picked.userData.rs.inst.label}の接続口です。押すとつなぎます。`; }
+  else if (armed) { title.textContent = "パーツ"; hint.innerHTML = `<b>${templates[armed].label}</b>をつなぐ場所を選んでいます。光っている接続口（${armedTargets.size}か所）をクリックしてください。`; }
+  else { title.textContent = "パーツ"; hint.textContent = "ロボットへドラッグしてつなぎます。今のロボットにつなげるパーツだけを出しています。"; }
+  $("libClear").hidden = !(picked || armed);
+  const freeAny = insts.some(i => i.sockets.some(x => !x.userData.rs.partner));
+  if (!empty && !picked && !freeAny) hint.textContent = "空いている接続口がありません。パーツを外すか、ドラッグで付け替えると、つなげる場所ができます。";
+  $("libCount").textContent = hidden ? `つなげないパーツ ${hidden}個を隠しています` : (shown ? "" : "この種類には、つなげるパーツがありません");
+  $("showAllWrap").hidden = hidden === 0 && !showAll;
+}
+$("showAll").addEventListener("change", renderLib);
+$("libClear").addEventListener("click", () => { picked = null; setArmed(null); showPanel(); });
+
+function placeCoreUser(key) {
+  placeCore(key); setArmed(null); commit();
+  status.textContent = "コアを置きました。置き場のパーツを、光っている接続口へドラッグしてつなぎます";
+}
+function attachUser(key) {
+  attach(key); commit();
+}
+function onCardClick(key) {
+  if (!insts.length) { if (templates[key].kind === "core") placeCoreUser(key); return; }
+  if (picked) { if (checkLink(picked, probeOf(key)).socket) attachUser(key); return; }
+  setArmed(armed === key ? null : key);
+  if (armed) status.textContent = armedTargets.size ? `光っている接続口（${armedTargets.size}か所）をクリックすると、${templates[key].label}をつなぎます` : "合う空きの接続口がありません";
+  else status.textContent = "選ぶのをやめました";
+  showPanel();
+}
+
+// --- 半透明（ドラッグ中のパーツ） ---
+const ghostCache = new Map(); window.__ghostCache = ghostCache;
+function ghostMat(m) {
+  if (!ghostCache.has(m)) { const g = m.clone(); g.transparent = true; g.opacity = 0.5; g.depthWrite = false; ghostCache.set(m, g); }
+  return ghostCache.get(m);
+}
+function setGhost(inst, on) {
+  for (const i of subtreeInsts(inst)) i.root.traverse(o => {
+    if (!o.isMesh || o.userData.isMark || o.userData.inst !== i) return;
+    if (on && !o.userData.realMat) { o.userData.realMat = o.material; o.material = ghostMat(o.material); }
+    else if (!on && o.userData.realMat) { o.material = o.userData.realMat; delete o.userData.realMat; }
+  });
+}
+
+// --- 画面の座標 ---
+const _sp = new THREE.Vector3();
+function setPtr(e) {
   const r = renderer.domElement.getBoundingClientRect();
   ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ptr, camera);
-  const marks = []; for (const inst of insts) for (const s of inst.sockets) if (s.userData.rs.mark.visible) marks.push(s.userData.rs.hit);
-  const hm = ray.intersectObjects(marks, false)[0];
-  if (hm) { picked = hm.object.userData.socket; selected = null; showPanel(); return; }
-  const hp = ray.intersectObjects(buildGroup.children, true).find(h => h.object.userData.inst && !h.object.userData.isMark);
-  if (hp) { selected = hp.object.userData.inst; picked = null; showPanel(); return; }
-  picked = null; showPanel();
+  return r;
+}
+function overCanvas(e) { return document.elementFromPoint(e.clientX, e.clientY) === renderer.domElement; }
+function overPanel(e) { const el = document.elementFromPoint(e.clientX, e.clientY); return !!(el && el.closest(".side")); }
+function pickPart(e) {
+  setPtr(e); ray.setFromCamera(ptr, camera);
+  const h = ray.intersectObjects(buildGroup.children, true).find(x => x.object.userData.inst && !x.object.userData.isMark && x.object.visible);
+  return h ? h.object.userData.inst : null;
+}
+function pickMark(e, only) {
+  setPtr(e); ray.setFromCamera(ptr, camera);
+  const marks = [];
+  for (const inst of insts) for (const s of inst.sockets) if (s.userData.rs.mark.visible && (!only || only.has(s))) marks.push(s.userData.rs.hit);
+  const h = ray.intersectObjects(marks, false)[0];
+  return h ? h.object.userData.socket : null;
+}
+function nearestMark(e, set, maxPx) {   // 画面の上で近い接続口（指でも吸い付くように）
+  const r = renderer.domElement.getBoundingClientRect();
+  let best = null, bd = maxPx;
+  for (const s of set) {
+    s.getWorldPosition(_sp).project(camera);
+    if (_sp.z > 1) continue;
+    const d = Math.hypot((_sp.x + 1) / 2 * r.width + r.left - e.clientX, (1 - _sp.y) / 2 * r.height + r.top - e.clientY);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
+// --- ドラッグ ---
+let ghostCard = null;
+function onCardDown(e, key) {
+  if (e.button !== 0) return;
+  press = { kind: "card", key, x: e.clientX, y: e.clientY, t: performance.now(), touch: e.pointerType === "touch", el: e.currentTarget };
+}
+// 3D の上で押したとき：パーツの上なら「付け替え」の候補（マウスはすぐ、指は長押し）。OrbitControls より先に受ける
+view.addEventListener("pointerdown", e => {
+  if (curMode !== "build" || e.button !== 0 || drag) return;
+  const mark = pickMark(e);
+  if (mark) { press = { kind: "mark", x: e.clientX, y: e.clientY }; return; }
+  const inst = pickPart(e);
+  if (!inst) { press = { kind: "none", x: e.clientX, y: e.clientY }; return; }
+  press = { kind: "part", inst, x: e.clientX, y: e.clientY, t: performance.now(), touch: e.pointerType === "touch" };
+  if (!press.touch && inst.target) controls.enabled = false;   // マウス：パーツの上からのドラッグは付け替え
+  if (press.touch && inst.target) press.timer = setTimeout(() => { if (press && press.kind === "part") { controls.enabled = false; beginDrag(press, e); } }, 380);
+}, true);
+addEventListener("pointermove", e => {
+  if (drag) { dragMove(e); return; }
+  if (press && (press.kind === "card" || press.kind === "part")) {
+    const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+    if (press.kind === "card" && press.touch) { if (moved > 8) press = null; return; }   // 指：置き場はスクロール。タップでつなぐ
+    if (press.kind === "part" && press.touch) { if (moved > 8) { clearTimeout(press.timer); press = null; } return; }   // 指：動かしたら回転
+    if (moved > 6) {
+      if (press.kind === "part" && !press.inst.target) { press = null; return; }   // 最初のコアは動かさない（回転にする）
+      if (press.el) press.el.dataset.dragged = "1";
+      beginDrag(press, e);
+    }
+    return;
+  }
+  if (curMode === "build" && !e.buttons && e.pointerType === "mouse") hoverAt(e);
 });
+addEventListener("pointerup", e => {
+  if (drag) { endDrag(e); return; }
+  const p = press; press = null;
+  if (p && p.timer) clearTimeout(p.timer);
+  controls.enabled = true;
+  if (!p || curMode !== "build" || p.kind === "card") return;
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 5 || !overCanvas(e)) return;
+  clickAt(e);
+});
+addEventListener("pointercancel", () => { if (drag) cancelDrag(); if (press && press.timer) clearTimeout(press.timer); press = null; controls.enabled = true; });
+
+function beginDrag(p, e) {
+  press = null;
+  let inst, origin = null;
+  if (p.kind === "card") {
+    if (!insts.length) { if (templates[p.key].kind === "core") { drag = { kind: "core", key: p.key, inst: null, targets: new Set() }; startGhostCard(p.key, e); document.body.classList.add("dragging"); } return; }
+    inst = instantiate(p.key); scene.add(inst.root);
+    startGhostCard(p.key, e);
+  } else {
+    inst = p.inst;
+    origin = { target: inst.target, own: inst.own, roll: inst.roll, mirrored: !!inst.mirrored };
+    inst.target.userData.rs.partner = null; inst.own.userData.rs.partner = null;
+    scene.attach(inst.root); inst.target = null;
+  }
+  const sub = subtreeInsts(inst);
+  drag = { kind: p.kind, inst, sub, origin, hover: null, key: inst.key };
+  drag.targets = targetsFor(inst, sub);
+  setGhost(inst, true);
+  setArmed(null); picked = null; hovInst = null;
+  controls.enabled = false;
+  document.body.classList.add("dragging");
+  refreshMarks(); setOutline();
+  status.textContent = drag.targets.size ? `光っている接続口（${drag.targets.size}か所）の上で離すとつなぎます` + (p.kind === "part" ? "。パネルの上で離すと外します" : "")
+    : "このパーツをつなげる空きの接続口がありません" + (p.kind === "part" ? "。パネルの上で離すと外します" : "");
+  dragMove(e);
+}
+function startGhostCard(key, e) {
+  ghostCard = document.createElement("div"); ghostCard.className = "dragGhostCard";
+  ghostCard.style.backgroundImage = `url(${templates[key].thumb || ""})`;
+  document.body.appendChild(ghostCard);
+  ghostCard.style.left = e.clientX + "px"; ghostCard.style.top = e.clientY + "px";
+}
+function snapTo(s) {
+  const inst = drag.inst, want = s.userData.rs;
+  s.add(inst.root); inst.target = s;
+  const o = drag.origin;
+  if (o && o.target === s) {   // 元の場所：元のひねりに戻す
+    inst.own = o.own; inst.roll = o.roll; setMirror(inst, o.mirrored); autoRollRestOnly(inst); placeOn(inst);
+  } else {
+    const cands = inst.sockets.filter(x => !x.userData.rs.partner && x.userData.rs.shape === want.shape && x.userData.rs.size === want.size && !isChildSock(inst, x));
+    let own = cands[0], bs = -Infinity;
+    for (const c of cands) { inst.own = c; const sc = autoRoll(inst); if (sc > bs + 1e-6) { bs = sc; own = c; } }
+    inst.own = own; autoRoll(inst);
+  }
+  drag.hover = s;
+}
+function isChildSock(inst, s) { return !!s.userData.rs.partner; }
+function autoRollRestOnly(inst) {   // rest（基本の向き）と振り幅だけ計算しなおし、ひねりはそのまま
+  const keep = inst.roll, km = !!inst.mirrored;
+  autoRoll(inst); inst.roll = keep; setMirror(inst, km);
+}
+function unsnap() { scene.attach(drag.inst.root); drag.inst.target = null; drag.hover = null; }
+const _plane = new THREE.Plane(), _pt = new THREE.Vector3(), _cd = new THREE.Vector3();
+function dragMove(e) {
+  if (ghostCard) { ghostCard.style.left = e.clientX + "px"; ghostCard.style.top = e.clientY + "px"; }
+  const inCanvas = overCanvas(e), inPanel = overPanel(e);
+  document.body.classList.toggle("dropDelete", drag.kind === "part" && inPanel);
+  if (drag.kind === "core") { if (ghostCard) ghostCard.style.opacity = inCanvas ? "0.9" : "0.5"; return; }
+  let best = null;
+  if (inCanvas) best = pickMark(e, drag.targets) || nearestMark(e, drag.targets, e.pointerType === "touch" ? 80 : 56);
+  if (best !== drag.hover) {
+    if (drag.hover) unsnap();
+    if (best) snapTo(best);
+    refreshMarks();
+    if (best) status.textContent = `ここで離すとつなぎます（${SHAPE_LABEL[best.userData.rs.shape]}${best.userData.rs.size}・${best.userData.rs.inst.label}）`;
+  }
+  if (ghostCard) ghostCard.style.display = inCanvas ? "none" : "";
+  drag.inst.root.visible = inCanvas || !!drag.hover;
+  if (!drag.hover && inCanvas) {   // 指の先に浮かべる（注目点を通り、カメラに向いた面の上）
+    setPtr(e); ray.setFromCamera(ptr, camera);
+    camera.getWorldDirection(_cd);
+    _plane.setFromNormalAndCoplanarPoint(_cd, controls.target);
+    if (ray.ray.intersectPlane(_plane, _pt)) drag.inst.root.position.copy(_pt);
+  }
+  if (inPanel && drag.kind === "part") status.textContent = "ここで離すと外します";
+}
+function endDrag(e) {
+  const d = drag; drag = null;
+  document.body.classList.remove("dragging", "dropDelete");
+  if (ghostCard) { ghostCard.remove(); ghostCard = null; }
+  controls.enabled = true;
+  if (d.kind === "core") {
+    if (overCanvas(e)) placeCoreUser(d.key);
+    showPanel(); return;
+  }
+  setGhost(d.inst, false);
+  d.inst.root.visible = true;
+  if (d.hover) {
+    const s = d.hover;
+    s.userData.rs.partner = d.inst.own; d.inst.own.userData.rs.partner = s;
+    selected = d.inst; picked = null;
+    status.textContent = d.kind === "part" ? `${d.inst.label}を付け替えました` : `${d.inst.label}をつなぎました`;
+    showPanel(); commit(); return;
+  }
+  if (d.kind === "part" && overPanel(e)) {
+    removeInst(d.inst); status.textContent = `${d.inst.label}を外しました（Ctrl+Z で戻せます）`;
+    showPanel(); commit(); return;
+  }
+  restoreDrag(d);
+  status.textContent = d.kind === "part" ? "つなげる場所の上ではなかったので、元に戻しました" : "つなげる場所の上ではなかったので、置きませんでした";
+  showPanel();
+}
+function restoreDrag(d) {
+  if (d.kind === "part") {
+    const o = d.origin;
+    if (d.hover) unsnapFor(d);
+    o.target.add(d.inst.root); d.inst.target = o.target; d.inst.own = o.own; d.inst.roll = o.roll; setMirror(d.inst, o.mirrored); placeOn(d.inst);
+    o.target.userData.rs.partner = o.own; o.own.userData.rs.partner = o.target;
+  } else {
+    removeInst(d.inst);
+  }
+}
+function unsnapFor(d) { scene.attach(d.inst.root); d.inst.target = null; d.hover = null; }
+function cancelDrag() {
+  const d = drag; drag = null;
+  document.body.classList.remove("dragging", "dropDelete");
+  if (ghostCard) { ghostCard.remove(); ghostCard = null; }
+  controls.enabled = true;
+  if (d.inst) { setGhost(d.inst, false); d.inst.root.visible = true; restoreDrag(d); }
+  status.textContent = "やめました"; showPanel();
+}
+
+// --- クリックとマウスの乗せ ---
+function clickAt(e) {
+  const s = pickMark(e);
+  if (s) {
+    if (armed && armedTargets.has(s)) {
+      picked = s; const k = armed; attachUser(k);
+      setArmed(armedStill(k) ? k : null);
+      if (armed) status.textContent = `${templates[k].label}をつなぎました。続けて光っている接続口をクリックすると、同じパーツをつなぎます（Esc でやめる）`;
+      showPanel(); return;
+    }
+    picked = s; selected = null; setArmed(null);
+    status.textContent = "置き場に、この接続口につなげるパーツだけを出しました";
+    showPanel(); return;
+  }
+  const inst = pickPart(e);
+  if (inst) { selected = inst; picked = null; setArmed(null); showPanel(); return; }
+  picked = null; selected = null; setArmed(null);
+  status.textContent = "パーツを置き場からドラッグするか、パーツをクリックして選びます";
+  showPanel();
+}
+function armedStill(key) { return targetsFor(probeOf(key)).size > 0; }
+let hoverQueued = false, lastMove = null;
+function hoverAt(e) {
+  lastMove = e;
+  if (hoverQueued) return;
+  hoverQueued = true;
+  requestAnimationFrame(() => {
+    hoverQueued = false;
+    const ev = lastMove; if (!ev || drag) return;
+    const inCanvas = overCanvas(ev);
+    const s = inCanvas ? pickMark(ev) : null;
+    const h = !s && inCanvas ? pickPart(ev) : null;
+    if (s !== hovSock) { hovSock = s; refreshMarks(); }
+    if (h !== hovInst) { hovInst = h; setOutline(); }
+    renderer.domElement.style.cursor = s ? "pointer" : h ? (h.target ? "grab" : "pointer") : "";
+  });
+}
+
+// --- 白い縁（選んだパーツ）と薄い縁（マウスが乗っているパーツ） ---
+// 選んだパーツの形だけを別の絵に塗り、その周りの数ピクセルを縁として重ねる（面には色を付けない）
+const olScene = new THREE.Scene();
+const olRT = new THREE.WebGLRenderTarget(4, 4);
+// 手前のパーツに隠れている所には縁を出さない：先に組み立て中のロボットの奥行きだけを描いてから、選んだパーツを重ねる
+const olDepthMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+const olSelMat = new THREE.MeshBasicMaterial({ color: 0xff0000, blending: THREE.AdditiveBlending, depthFunc: THREE.LessEqualDepth, depthWrite: false });
+const olHovMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, blending: THREE.AdditiveBlending, depthFunc: THREE.LessEqualDepth, depthWrite: false });
+const olQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { tMask: { value: olRT.texture }, px: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+  fragmentShader: `uniform sampler2D tMask; uniform vec2 px; varying vec2 vUv;
+    void main(){
+      vec2 c = texture2D(tMask, vUv).rg; vec2 m = c;
+      for (int i = 0; i < 16; i++) {
+        float a = 6.2831853 * float(i) / 16.0; vec2 d = vec2(cos(a), sin(a)) * px;
+        m = max(m, texture2D(tMask, vUv + d).rg); m = max(m, texture2D(tMask, vUv + d * 2.0).rg); m = max(m, texture2D(tMask, vUv + d * 3.0).rg);
+      }
+      float es = clamp(m.r - c.r, 0.0, 1.0);
+      float eh = clamp(m.g - c.g - c.r, 0.0, 1.0);
+      if (es > 0.01) gl_FragColor = vec4(1.0, 1.0, 1.0, es);
+      else if (eh > 0.01) gl_FragColor = vec4(0.78, 0.82, 0.86, eh * 0.7);
+      else discard;
+    }`,
+  transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+}));
+olQuad.frustumCulled = false;
+const olQuadScene = new THREE.Scene(); olQuadScene.add(olQuad);
+const olCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const olItems = [];
+function ownMeshes(inst) {
+  const out = [];
+  inst.root.traverse(o => { if (o.isMesh && o.userData.inst === inst && !o.userData.isMark) out.push(o); });
+  return out;
+}
+function setOutline() {
+  for (const it of olItems) olScene.remove(it.proxy);
+  olItems.length = 0;
+  if (curMode !== "build") return;
+  const add = (inst, mat) => { for (const m of ownMeshes(inst)) { const p = new THREE.Mesh(m.geometry, mat); p.matrixAutoUpdate = false; p.frustumCulled = false; olScene.add(p); olItems.push({ src: m, proxy: p }); } };
+  if (hovInst && hovInst !== selected && !drag) add(hovInst, olHovMat);
+  if (selected && insts.includes(selected)) add(selected, olSelMat);
+}
+const _cc = new THREE.Color();
+function sizeOutline() {
+  const s = renderer.getDrawingBufferSize(new THREE.Vector2());
+  olRT.setSize(s.x, s.y);
+  const dpr = renderer.getPixelRatio();
+  olQuad.material.uniforms.px.value.set(dpr * 0.9 / s.x, dpr * 0.9 / s.y);
+}
+sizeOutline();
+function renderOutline() {
+  if (!olItems.length || curMode !== "build") return;
+  let any = false;
+  for (const it of olItems) {
+    let vis = true; for (let o = it.src; o; o = o.parent) if (!o.visible) { vis = false; break; }
+    it.proxy.visible = vis; any ||= vis;
+    it.proxy.geometry = it.src.geometry; it.proxy.matrix.copy(it.src.matrixWorld); it.proxy.matrixWorld.copy(it.src.matrixWorld);
+  }
+  if (!any) return;
+  const a = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+  renderer.setRenderTarget(olRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+  const bg = scene.background; scene.background = null; scene.overrideMaterial = olDepthMat;
+  renderer.autoClear = false; renderer.render(scene, camera); renderer.render(olScene, camera); renderer.autoClear = true;
+  scene.overrideMaterial = null; scene.background = bg;
+  renderer.setRenderTarget(null); renderer.setClearColor(_cc, a);
+  renderer.autoClear = false; renderer.render(olQuadScene, olCam); renderer.autoClear = true;
+}
+
+// --- 元に戻す・やり直す・自動保存（ロボットを「木」で覚える） ---
+function serializeBuild() {
+  const root = insts.find(i => !i.target && i.root.parent === buildGroup);
+  if (!root) return null;
+  const node = i => ({ k: i.key, c: insts.filter(j => j.target && j.target.userData.rs.inst === i && j.own)
+    .map(j => ({ s: i.sockets.indexOf(j.target), o: j.sockets.indexOf(j.own), r: Math.round(j.roll * 100) / 100, m: j.mirrored ? 1 : 0, ...node(j) })) });
+  return node(root);
+}
+function loadBuild(tree) {
+  resetBuild();
+  if (tree && templates[tree.k]) {
+    const root = instantiate(tree.k); buildGroup.add(root.root);
+    const add = (parent, n) => {
+      for (const c of n.c || []) {
+        const t = parent.sockets[c.s];
+        if (!templates[c.k] || !t || t.userData.rs.partner) continue;
+        const inst = instantiate(c.k), own = inst.sockets[c.o];
+        if (!own || own.userData.rs.shape !== t.userData.rs.shape || own.userData.rs.size !== t.userData.rs.size) { removeInst(inst); continue; }
+        inst.target = t; t.add(inst.root); inst.own = own;
+        autoRoll(inst); inst.roll = c.r; setMirror(inst, !!c.m); placeOn(inst);
+        t.userData.rs.partner = own; own.userData.rs.partner = t;
+        add(inst, c);
+      }
+    };
+    add(root, tree);
+  }
+  picked = null; selected = null; setArmed(null);
+}
+const hist = []; let hi = -1;
+const SAVE_KEY = "rs-build-v1";
+function commit() {
+  const s = JSON.stringify(serializeBuild());
+  if (hist[hi] === s) return;
+  hist.splice(hi + 1); hist.push(s); hi = hist.length - 1;
+  if (hist.length > 120) { hist.shift(); hi--; }
+  try { localStorage.setItem(SAVE_KEY, s); } catch (err) { /* 保存できない環境では何もしない */ }
+  updateTools();
+}
+function undo() {
+  if (hi <= 0 || drag) return;
+  hi--; loadBuild(JSON.parse(hist[hi])); showPanel(); updateTools();
+  try { localStorage.setItem(SAVE_KEY, hist[hi]); } catch (err) { /* 無視 */ }
+  status.textContent = "元に戻しました";
+}
+function redo() {
+  if (hi >= hist.length - 1 || drag) return;
+  hi++; loadBuild(JSON.parse(hist[hi])); showPanel(); updateTools();
+  try { localStorage.setItem(SAVE_KEY, hist[hi]); } catch (err) { /* 無視 */ }
+  status.textContent = "やり直しました";
+}
+function updateTools() { $("undoBtn").disabled = hi <= 0; $("redoBtn").disabled = hi >= hist.length - 1; }
+$("undoBtn").addEventListener("click", undo);
+$("redoBtn").addEventListener("click", redo);
+$("frameBtn").addEventListener("click", () => frameAll());
+function frameAll() {
+  const g = buildGroup.visible ? buildGroup : viewGroup;
+  g.updateMatrixWorld(true); _box.setFromObject(g);
+  if (_box.isEmpty()) return;
+  const c = _box.getCenter(new THREE.Vector3()), h = Math.max(_box.max.y - _box.min.y, (_box.max.x - _box.min.x) * 0.6, (_box.max.z - _box.min.z) * 0.6);
+  const off = camera.position.clone().sub(controls.target);
+  controls.target.copy(c); camera.position.copy(c).add(off.setLength(Math.max(6, h * 2.1)));
+}
+function restoreSaved() {
+  let s = null;
+  try { s = localStorage.getItem(SAVE_KEY); } catch (err) { s = null; }
+  if (s && s !== "null") { try { loadBuild(JSON.parse(s)); } catch (err) { resetBuild(); } }
+  hist.length = 0; hist.push(JSON.stringify(serializeBuild())); hi = 0; updateTools();
+}
+
+// --- キー操作（組み立て中だけ） ---
+addEventListener("keydown", e => {
+  if (curMode !== "build") return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && (e.key === "z" || e.key === "Z")) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+  if (e.key === "Escape") {
+    if (drag) { cancelDrag(); return; }
+    picked = null; selected = null; setArmed(null); status.textContent = "選ぶのをやめました"; showPanel(); return;
+  }
+  if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+    e.preventDefault();
+    const name = selected.label; removeInst(selected); status.textContent = `${name}を外しました（Ctrl+Z で戻せます）`; showPanel(); commit(); return;
+  }
+  if ((e.key === "r" || e.key === "R") && !mod && selected && selected.own) { twistBy(selected, e.shiftKey ? -1 : 1); commit(); return; }
+  if ((e.key === "f" || e.key === "F") && !mod) { frameAll(); return; }
+});
+
 
 // 置き場の読み込み（parts.json と、パーツごとの GLB）
 fetch("parts.json").then(r => r.json()).then(async lib => {
-  const corePicks = document.getElementById("corePicks");
   const loaded = await Promise.all(lib.parts.map(p => loadGLB(p.file)));  // まとめて並行に読む
   for (const [n, p] of lib.parts.entries()) {
     const gltf = loaded[n];
     // 一致チェックに使う「このパーツの接続口の一覧」（形と大きさだけ）
     const probe = [];
     gltf.scene.traverse(o => { const info = socketInfo(o); if (info) probe.push({ userData: { rs: { ...info, partner: null } } }); });
-    templates[p.key] = { label: p.label, kind: p.kind, gltf, probe };
-    if (p.kind === "core") {
-      const b = document.createElement("button"); b.type = "button"; b.className = "pick";
-      b.innerHTML = `<b>${p.label}</b><span>${probe.map(s => SHAPE_LABEL[s.userData.rs.shape] + s.userData.rs.size).join("・")}</span>`;
-      b.addEventListener("click", () => placeCore(p.key));
-      corePicks.appendChild(b);
-    }
+    templates[p.key] = { label: p.label, kind: p.kind, cat: p.cat || null, gltf, probe };
   }
+  makeThumbs();
+  restoreSaved();
+  showPanel();
 }).catch(err => { console.error(err); });
 
 // ============ テスト部屋 ============
@@ -2299,6 +2907,10 @@ for (const id of ["testSpeed", "testGait"]) document.getElementById(id).addEvent
 
 // 見本 / 組み立て / テスト部屋 の切り替え
 function setMode(mode) {
+  curMode = mode;
+  document.getElementById("buildTools").hidden = mode !== "build";
+  if (drag) cancelDrag();
+  hovInst = null; hovSock = null; renderer.domElement.style.cursor = "";
   const build = mode !== "view";
   testMode = mode === "test";
   document.getElementById("tabView").setAttribute("aria-selected", String(mode === "view"));
@@ -2323,6 +2935,7 @@ document.getElementById("tabTest").addEventListener("click", () => setMode("test
 function fitView() {   // 3D の大きさは #view に合わせる（スマホでは上半分）
   camera.aspect = view.clientWidth / view.clientHeight; camera.updateProjectionMatrix();
   renderer.setSize(view.clientWidth, view.clientHeight);
+  sizeOutline();
 }
 addEventListener("resize", fitView);
 document.getElementById("panelToggle").addEventListener("click", e => {
