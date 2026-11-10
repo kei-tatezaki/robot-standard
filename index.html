@@ -134,6 +134,24 @@
   .lookCard .glow { position: relative; }
   .lookCard .glow::after { content: ""; position: absolute; right: 5px; top: 50%; width: 12px; height: 3px; border-radius: 2px;
     transform: translateY(-50%); background: var(--g, transparent); box-shadow: 0 0 8px var(--g, transparent); }
+  .swapCard.sel { border-color: var(--circle); box-shadow: 0 0 0 1px var(--circle) inset; }
+  .swapCard i { position: absolute; top: 8px; left: 8px; font-style: normal; font-size: 10px; font-weight: 700; color: #1d2023;
+    background: var(--ink); border-radius: 999px; padding: 1px 7px; }
+  .editPanel { width: min(620px, calc(100vw - 24px)); }
+  .editPanel .swapCards { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); max-height: 34vh; overflow-y: auto; }
+  .symT { font-size: 12px; white-space: nowrap; }
+  .editRow { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .editRow .grow { flex: 1; }
+  .rotNote { font-size: 11px; color: var(--muted); }
+  .tool.primary { background: var(--ink); color: #1d2023; border-color: var(--ink); font-weight: 700; padding: 6px 18px; }
+  .tool.primary[disabled] { background: none; color: var(--muted); border-color: var(--panel-edge); }
+  .hintText { font-size: 13px; color: var(--ink); background: rgba(39,43,48,.92); border: 1px solid var(--panel-edge); border-radius: 999px;
+    padding: 10px 18px; white-space: nowrap; }
+  .swapToast { position: fixed; left: 50%; bottom: 84px; transform: translate(-50%, 10px); z-index: 7; max-width: min(620px, calc(100vw - 32px));
+    background: rgba(39,43,48,.96); border: 1px solid var(--panel-edge); border-radius: 12px; padding: 10px 16px; font-size: 13px;
+    color: var(--ink); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+  .swapToast.on { opacity: 1; transform: translate(-50%, 0); }
+  body.editing .moreLink { display: none; }
   .swapResult { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 1.5em; line-height: 1.5; }
   .swapResult b { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } }
@@ -148,6 +166,10 @@
     .swapCards { gap: 6px; }
     .swapCards.look { grid-template-columns: repeat(5, 1fr); }
     .swapCard img { height: 60px; }
+    .editPanel .swapCards { grid-template-columns: repeat(4, 1fr); max-height: 30vh; }
+    .hintText { font-size: 12px; padding: 9px 12px; }
+    .swapToast { bottom: 76px; font-size: 12px; }
+    .rotNote { display: none; }
   }
 
   /* 組み立て：パーツ置き場（11/10 改） */
@@ -3013,26 +3035,34 @@ document.getElementById("panelToggle").addEventListener("click", e => {
   fitView();
 });
 window.__rs = { scene, camera, renderer, insts, buildGroup, controls, buildRecipe, setRun, swapTool, startMove, randomBuild, startAutoMove, stopAutoMove, setMode, planAutoMotion, checkOverlaps, tunePlan, lowestY, updateAutoMove, physUpdate, resetBody, getPhys: () => phys, getPlan: () => autoMove, pickGait, RECIPES, buildMultiLeg, roleMapWeb, startJsonMove, stopJsonMove, updateJsonMove, getJsonMove: () => jsonMove, jsonAnims, fxUpdate, renderShaken, fxEvent };  // 確認用
-// ============ 付け替えの画面（トップ。今のビューアは ?full。11/11） ============
-// 審査員が最初の30秒でやること：動いているロボットの脚を押す → 別の脚を選ぶ → カチッと付いて、そのまま新しい脚で歩く。
-// 見せたいのは「同じ接続口なら、形も大きさも違う脚が腰ごと付いて、歩き方は脚の長さから自動で決まる」こと。
-// 体（脚以外）を押すと見た目（世界観）を替える：形はそのまま、テクスチャだけが替わる。
+// ============ 付け替えの画面（トップ。今のビューアは ?full。11/11 改） ============
+// 流れ：替えたい所を押す → カメラがその接続口に寄って止まる（光る輪でつく場所を見せる）
+//       → つなげるパーツを選ぶ（その場でつく）→ 回す → 「確定」で反映、「やめて離れる」で元に戻す。
+// ふだんはロボットが前へ歩き、カメラが付いていく（その場歩きは足がもつれて見えるので）。
 const swapMode = !new URLSearchParams(location.search).has("full");
-let swapSel = null, swapHov = null, swapAnim = null, trayOpen = null;   // trayOpen: "legs" | "look" | null
+let swapSel = null, swapHov = null, swapAnim = null, trayOpen = null, edit = null;
 const LEG_SETS = [   // 腰ごと替える（腰は胴の下の 四角L の口につながる）
   { id: "basic", label: "標準の脚", note: "ひざと足首", hip: "Hip", leg: ["Leg"] },
   { id: "wheel", label: "車輪の脚", note: "足の代わりに車輪", hip: "Hip", leg: ["LegWheel"] },
   { id: "golem", label: "ゴーレムの脚", note: "太もも・すね・足", hip: "Hip", leg: ["GolemThigh", "GolemShin", "GolemFoot"] },
   { id: "boss", label: "番人の脚", note: "番人の腰ごと", hip: "BossHip", leg: ["BossThigh", "BossShin", "BossFoot"] },
 ];
-const setReady = set => [set.hip, ...set.leg].every(k => templates[k]);
+const ARM_SETS = [   // 肩の先の 六角M の口
+  { id: "arm", label: "標準の腕", note: "ひじ・手首", chain: ["Arm"] },
+  { id: "blade", label: "刃の腕", note: "刃が出る", chain: ["ArmBlade"] },
+  { id: "golemArm", label: "ゴーレムの腕", note: "上腕・前腕・拳", chain: ["GolemUpperArm", "GolemForearm", "GolemFist"] },
+  { id: "bossFist", label: "番人の腕（拳）", note: "上腕・前腕・拳", chain: ["BossUpperArm", "BossForearm", "BossFist"] },
+  { id: "bossPalm", label: "番人の腕（掌）", note: "上腕・前腕・掌", chain: ["BossUpperArmB", "BossForearmB", "BossPalm"] },
+];
+const KIND_INFO = {
+  legs: { title: "脚（腰ごと）", where: "胴の下" }, arm: { title: "腕", where: "肩の先" }, shoulder: { title: "肩", where: "胴の横" },
+  head: { title: "頭", where: "胴の上" }, part: { title: "パーツ", where: "" },
+};
+const setKeys = set => set.hip ? [set.hip, ...set.leg] : set.chain;
+const setReady = set => setKeys(set).every(k => templates[k]);
 const hipInst = () => insts.find(i => /Hip$/.test(i.key) && i.target);
 function legTree() { const h = hipInst(); return h ? subtreeInsts(h) : new Set(); }
-function currentLegSet() {
-  const h = hipInst(); if (!h) return null;
-  const leg = h.sockets.map(s => s.userData.rs.partner && s.userData.rs.partner.userData.rs.inst).find(Boolean);
-  return LEG_SETS.find(L => L.hip === h.key && leg && L.leg[0] === leg.key) || null;
-}
+const V3 = () => new THREE.Vector3();
 function attachRaw(target, key) {   // 人の操作と同じ決まり（合う口・一番正面を向くひねり）で、表示や記録はせずにつなぐ
   const inst = instantiate(key), want = target.userData.rs;
   const cands = inst.sockets.filter(s => !s.userData.rs.partner && s.userData.rs.shape === want.shape && s.userData.rs.size === want.size);
@@ -3044,7 +3074,7 @@ function attachRaw(target, key) {   // 人の操作と同じ決まり（合う�
   target.userData.rs.partner = own; own.userData.rs.partner = target;
   return inst;
 }
-function attachChain(target, chain) {   // 太もも→すね→足のように、前のパーツの空いた口へ順につなぐ
+function attachChain(target, chain) {   // 上腕→前腕→拳のように、前のパーツの空いた口へ順につなぐ
   let first = null, prev = null, t = target;
   for (const key of chain) {
     if (prev) { const p = probeOf(key); t = prev.sockets.find(s => !s.userData.rs.partner && checkLink(s, p).socket); if (!t) break; }
@@ -3054,31 +3084,46 @@ function attachChain(target, chain) {   // 太もも→すね→足のように�
   }
   return first;
 }
-function attachLegSet(target, set) {   // 腰 → 腰の 六角M の口に左右の脚
-  const hip = attachRaw(target, set.hip); if (!hip) return null;
-  for (const s of hip.sockets.filter(x => !x.userData.rs.partner && x.userData.rs.shape === "HEX" && x.userData.rs.size === "M")) attachChain(s, set.leg);
-  return hip;
+function attachSet(target, set) {
+  if (set.hip) {   // 腰 → 腰の 六角M の口に左右の脚
+    const hip = attachRaw(target, set.hip); if (!hip) return null;
+    for (const s of hip.sockets.filter(x => !x.userData.rs.partner && x.userData.rs.shape === "HEX" && x.userData.rs.size === "M")) attachChain(s, set.leg);
+    return hip;
+  }
+  return attachChain(target, set.chain);
 }
+function relink(child, target) {   // 外したパーツの先に付いていたものを、新しいパーツの合う口へ付け直す
+  const want = target.userData.rs, own = child.own;
+  if (!own || own.userData.rs.shape !== want.shape || own.userData.rs.size !== want.size) return false;
+  target.add(child.root); child.target = target;
+  const keep = child.roll; autoRoll(child); child.roll = keep; placeOn(child);
+  target.userData.rs.partner = own; own.userData.rs.partner = target;
+  return true;
+}
+
+// --- サムネイル ---
 function renderThumbOf(obj) {
   obj.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(obj);
-  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  const c = box.getCenter(V3()), r = box.getSize(V3()).length() / 2;
   const dir = new THREE.Vector3(0.6, 0.3, 1).normalize();
   thumbCam.position.copy(c).addScaledVector(dir, r / Math.sin(THREE.MathUtils.degToRad(14)) * 1.0);
   thumbCam.lookAt(c); thumbCam.near = r * 0.1; thumbCam.far = r * 20; thumbCam.updateProjectionMatrix();
   thumbR.render(thumbScene, thumbCam);
   return thumbR.domElement.toDataURL("image/png");
 }
-function makeSetThumbs() {   // 腰と左右の脚を、つないだ形のまま描く
-  for (const set of LEG_SETS) {
+function makeSetThumbs() {
+  for (const set of [...LEG_SETS, ...ARM_SETS]) {
     if (!setReady(set)) continue;
-    const hip = instantiate(set.hip);
-    thumbScene.add(hip.root);
-    for (const s of hip.sockets.filter(x => x.userData.rs.shape === "HEX" && x.userData.rs.size === "M")) attachChain(s, set.leg);
-    set.thumb = renderThumbOf(hip.root);
-    removeInst(hip); thumbScene.remove(hip.root);
+    const keys = setKeys(set);
+    if (keys.length === 1 && !set.hip) { set.thumb = templates[keys[0]].thumb; continue; }
+    const root = instantiate(keys[0]);
+    thumbScene.add(root.root);
+    if (set.hip) { for (const s of root.sockets.filter(x => x.userData.rs.shape === "HEX" && x.userData.rs.size === "M")) attachChain(s, set.leg); }
+    else { let prev = root; for (const key of keys.slice(1)) { const t = prev.sockets.find(s => !s.userData.rs.partner && checkLink(s, probeOf(key)).socket); if (!t) break; prev = attachRaw(t, key) || prev; } }
+    set.thumb = renderThumbOf(root.root);
+    removeInst(root); thumbScene.remove(root.root);
   }
-  document.querySelectorAll(".swapCard img[data-set]").forEach(im => { const s = LEG_SETS.find(x => x.id === im.dataset.set); if (s && s.thumb) im.src = s.thumb; });
 }
 function swatchHTML(id) {
   const th = THEMES[id];
@@ -3088,39 +3133,57 @@ function swatchHTML(id) {
     `<span style="background-image:url(${tex(id, "RS_Blade")})"></span></span>`;
 }
 
-// 舞台：テスト部屋の壁と目盛りを外し、円く暗くなる床だけにする
+// --- 舞台：どこまでも続く床（1mごとの薄い目）と、遠くを暗くする霧 ---
 function stageFloorTex() {
-  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d");
-  const rg = g.createRadialGradient(256, 256, 20, 256, 256, 256);
-  rg.addColorStop(0, "#3a4047"); rg.addColorStop(0.55, "#2b3035"); rg.addColorStop(1, "#1d2023");
-  g.fillStyle = rg; g.fillRect(0, 0, 512, 512);
-  g.strokeStyle = "rgba(255,255,255,0.06)"; g.lineWidth = 2;
-  for (const r of [80, 150, 220]) { g.beginPath(); g.arc(256, 256, r, 0, Math.PI * 2); g.stroke(); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  g.fillStyle = "#2a2f34"; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = "rgba(255,255,255,0.07)"; g.lineWidth = 3; g.strokeRect(0, 0, 256, 256);
+  g.strokeStyle = "rgba(255,255,255,0.03)"; g.lineWidth = 2; g.beginPath(); g.moveTo(128, 0); g.lineTo(128, 256); g.moveTo(0, 128); g.lineTo(256, 128); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(80, 80); t.anisotropy = 8;
+  return t;
 }
+let stageFloor = null;
 function initSwap() {
   document.body.classList.add("swapMode");
-  fitView();   // スマホ：3D を画面いっぱいにする
-  document.querySelector(".title").innerHTML = "ロボット規格<small>パーツを替えても、そのまま動く。<span class=\"nb\">ロボットを押して試してください</span></small>";
-  const more = document.createElement("a"); more.className = "moreLink"; more.href = "?full"; more.textContent = "作る人向けの画面（組み立て・テスト部屋）";
+  fitView();
+  window.__rsNoWrap = true;   // 部屋の端で出直さない（床はどこまでも続く）
+  document.querySelector(".title").innerHTML = "ロボット規格<small>パーツを替えても、そのまま動く。<span class=\"nb\">替えたい所を押してください</span></small>";
+  const more = document.createElement("a"); more.className = "moreLink"; more.href = "?full"; more.textContent = innerWidth <= 760 ? "作る人向け" : "作る人向けの画面（組み立て・テスト部屋）";
   document.body.appendChild(more);
+  // 見た目のトレイ
   const tray = document.createElement("div"); tray.className = "swapTray"; tray.id = "swapTray"; tray.hidden = true;
-  tray.innerHTML = `<div class="swapHead"><div><b id="swapTitle"></b><span class="sub" id="swapSub"></span></div>
-    <button class="linkBtn" type="button" id="swapClose">閉じる</button></div><div class="swapCards" id="swapCards"></div>
-    <p class="swapResult" id="swapResult" aria-live="polite"></p>`;
+  tray.innerHTML = `<div class="swapHead"><div><b>見た目を替える</b><span class="sub">形はそのまま。素材の枠（装甲・骨組み・刃・光）に当てるテクスチャだけを替えます</span></div>
+    <button class="linkBtn" type="button" id="swapClose">閉じる</button></div><div class="swapCards look" id="swapCards"></div><p class="swapResult" id="swapResult" aria-live="polite"></p>`;
   document.body.appendChild(tray);
+  // 付け替えのパネル
+  const ed = document.createElement("div"); ed.className = "swapTray editPanel"; ed.id = "editPanel"; ed.hidden = true;
+  ed.innerHTML = `<div class="swapHead"><div><b id="editTitle"></b><span class="sub" id="editSub"></span></div>
+      <label class="toggle symT" id="editSymWrap"><input type="checkbox" id="editSym" checked> 左右そろえる</label></div>
+    <div class="swapCards" id="editCards"></div>
+    <div class="editRow">
+      <button type="button" class="tool" id="rotL" title="左へ回す">⟲ 回す</button><button type="button" class="tool" id="rotR" title="右へ回す">回す ⟳</button>
+      <span class="rotNote" id="rotNote"></span><span class="grow"></span>
+      <button type="button" class="tool" id="editCancel">やめて離れる</button><button type="button" class="tool primary" id="editOk">確定</button>
+    </div><p class="swapResult" id="editResult" aria-live="polite"></p>`;
+  document.body.appendChild(ed);
   const hint = document.createElement("div"); hint.className = "swapHints"; hint.id = "swapHints";
-  hint.innerHTML = `<button type="button" class="hintBtn" id="hintLegs">脚を替える</button><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>`;
+  hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・肩・頭）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>`;
   document.body.appendChild(hint);
-  document.getElementById("hintLegs").addEventListener("click", () => openTray("legs"));
-  document.getElementById("hintLook").addEventListener("click", () => openTray("look"));
-  document.getElementById("swapClose").addEventListener("click", closeTray);
+  document.getElementById("hintLook").addEventListener("click", openLook);
+  document.getElementById("swapClose").addEventListener("click", closeLook);
+  document.getElementById("rotL").addEventListener("click", () => rotateEdit(-1));
+  document.getElementById("rotR").addEventListener("click", () => rotateEdit(1));
+  document.getElementById("editCancel").addEventListener("click", cancelEdit);
+  document.getElementById("editOk").addEventListener("click", confirmEdit);
+  document.getElementById("editSym").addEventListener("change", () => { if (edit && edit.choice) choose(edit.choice, true); });
   // 舞台
   for (const ch of room.children) if (ch !== room.children[0]) ch.visible = false;
-  room.children[0].material.map = stageFloorTex(); room.children[0].material.needsUpdate = true;
-  room.children[0].geometry = new THREE.CircleGeometry(7, 64);
-  document.getElementById("testWalk").checked = false;   // その場で歩く（押しやすく、比べやすい）
+  stageFloor = room.children[0];
+  stageFloor.material.map = stageFloorTex(); stageFloor.material.needsUpdate = true;
+  stageFloor.geometry = new THREE.PlaneGeometry(80, 80);
+  scene.fog = new THREE.Fog(scene.background.getHex(), 12, 34);
+  document.getElementById("testWalk").checked = true;
   setMode("test");
   buildRecipe("human");
   startAutoMove();
@@ -3128,144 +3191,316 @@ function initSwap() {
   setTimeout(frameSwap, 400);
   status.textContent = "";
 }
-function openTray(kind) {
+
+// --- 見た目 ---
+function openLook() {
+  if (edit) return;
   const box = document.getElementById("swapCards"); box.innerHTML = "";
-  box.className = "swapCards " + kind;
   document.getElementById("swapResult").textContent = "";
-  if (kind === "legs") {
-    document.getElementById("swapTitle").textContent = "脚を替える";
-    document.getElementById("swapSub").innerHTML = `どれも胴の下の <span class="sockettag" style="background:${SHAPE_CSS.SQUARE}">四角L</span> の口に腰ごとつながります`;
-    const cur = currentLegSet();
-    for (const set of LEG_SETS) {
-      if (!setReady(set)) continue;
-      const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (cur && cur.id === set.id ? " now" : "");
-      b.dataset.set = set.id;
-      b.innerHTML = `<img alt="" data-set="${set.id}" src="${set.thumb || ""}"><b>${set.label}</b><span>${set.note}</span>`;
-      b.addEventListener("click", () => doSwap(set));
-      box.appendChild(b);
-    }
-    swapSel = [...legTree()];
-  } else {
-    document.getElementById("swapTitle").textContent = "見た目を替える";
-    document.getElementById("swapSub").textContent = "形はそのまま。素材の枠（装甲・骨組み・刃・光）に当てるテクスチャだけを替えます";
-    const now = document.querySelector('.chip[aria-pressed="true"]');
-    for (const id of Object.keys(THEMES)) {
-      const b = document.createElement("button"); b.type = "button"; b.className = "lookCard" + (now && now.dataset.theme === id ? " now" : "");
-      b.dataset.theme = id;
-      b.innerHTML = `${swatchHTML(id)}<b>${THEMES[id].name}</b>`;
-      b.title = THEMES[id].desc;
-      b.addEventListener("click", () => {
-        applyTheme(id);
-        box.querySelectorAll(".lookCard").forEach(c => c.classList.toggle("now", c.dataset.theme === id));
-        document.getElementById("swapResult").textContent = `「${THEMES[id].name}」：${THEMES[id].desc}。パーツの形は1つも替えていません`;
-      });
-      box.appendChild(b);
-    }
-    swapSel = null;   // 見た目は縁を付けない（色の変化が見えにくくなるので）
+  const now = document.querySelector('.chip[aria-pressed="true"]');
+  for (const id of Object.keys(THEMES)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "lookCard" + (now && now.dataset.theme === id ? " now" : "");
+    b.dataset.theme = id; b.title = THEMES[id].desc;
+    b.innerHTML = `${swatchHTML(id)}<b>${THEMES[id].name}</b>`;
+    b.addEventListener("click", () => {
+      applyTheme(id);
+      box.querySelectorAll(".lookCard").forEach(c => c.classList.toggle("now", c.dataset.theme === id));
+      document.getElementById("swapResult").textContent = `「${THEMES[id].name}」：${THEMES[id].desc}。パーツの形は1つも替えていません`;
+    });
+    box.appendChild(b);
   }
   document.getElementById("swapTray").hidden = false;
-  document.body.classList.add("trayOpen");
-  trayOpen = kind; swapHov = null; setOutline();
+  document.body.classList.add("trayOpen"); trayOpen = "look";
   requestAnimationFrame(frameSwap);
 }
-function closeTray() {
+function closeLook() {
   document.getElementById("swapTray").hidden = true;
-  document.body.classList.remove("trayOpen");
-  trayOpen = null; swapSel = null; setOutline();
+  document.body.classList.remove("trayOpen"); trayOpen = null; frameSwap();
+}
+
+// --- 替える場所（接続口）を、押したパーツから決める ---
+function slotOf(inst) {
+  if (legTree().has(inst)) { const h = hipInst(); return { kind: "legs", target: h.target, root: h }; }
+  let cur = inst;
+  while (cur.target) { const p = cur.target.userData.rs.inst; if (!p.target || /Shoulder/.test(p.key)) break; cur = p; }
+  if (!cur.target) return null;   // コア（胴）は替えない → 見た目
+  const parent = cur.target.userData.rs.inst;
+  const kind = /Shoulder/.test(parent.key) ? "arm" : /Shoulder/.test(cur.key) ? "shoulder" : /Head/.test(cur.key) ? "head" : "part";
+  return { kind, target: cur.target, root: cur };
+}
+function candidatesFor(slot) {
+  if (slot.kind === "legs") return LEG_SETS.filter(setReady);
+  const want = slot.target.userData.rs;   // 今は埋まっている口なので、形と大きさだけで合うものを選ぶ
+  const fits = k => templates[k].probe.some(x => x.userData.rs.shape === want.shape && x.userData.rs.size === want.size);
+  if (slot.kind === "arm") return ARM_SETS.filter(setReady).filter(s => fits(s.chain[0]));
+  // 1つのパーツ：つなげるものを全部（旧い版は出さない）
+  return Object.keys(templates).filter(k => !isOld(k) && templates[k].kind !== "core" && catOf(k) !== "move" && fits(k))
+    .filter(k => slot.kind !== "head" || catOf(k) === "head").filter(k => slot.kind !== "shoulder" || /Shoulder/.test(k))
+    .map(k => ({ id: k, label: templates[k].label, note: "", chain: [k], thumb: templates[k].thumb }));
+}
+function setIdOf(slot) {
+  if (slot.kind === "legs") {
+    const h = slot.root, leg = h.sockets.map(s => s.userData.rs.partner && s.userData.rs.partner.userData.rs.inst).find(Boolean);
+    const m = LEG_SETS.find(L => L.hip === h.key && leg && L.leg[0] === leg.key); return m ? m.id : null;
+  }
+  if (slot.kind === "arm") { const m = ARM_SETS.find(a => a.chain[0] === slot.root.key); return m ? m.id : null; }
+  return slot.root.key;
+}
+// 接続口を「コアから何番目の口をたどるか」で覚える（ロボットを作り直しても同じ口を見つけられる）
+function pathOf(sock) {
+  const path = []; let s = sock;
+  while (s) { const inst = s.userData.rs.inst; path.unshift(inst.sockets.indexOf(s)); s = inst.target; if (s) path.unshift(-1); }
+  return path;
+}
+function resolvePath(path) {
+  let inst = insts.find(i => !i.target && i.root.parent === buildGroup); if (!inst) return null;
+  let sock = null;
+  for (let i = 0; i < path.length; i++) {
+    if (path[i] === -1) { inst = sock && sock.userData.rs.partner && sock.userData.rs.partner.userData.rs.inst; if (!inst) return null; continue; }
+    sock = inst.sockets[path[i]]; if (!sock) return null;
+  }
+  return sock;
+}
+function mirrorOf(sock) {   // 左右反対の、同じ形・大きさの口
+  const core = insts.find(i => !i.target); if (!core) return null;
+  core.root.updateMatrixWorld(true);
+  const inv = core.root.matrixWorld.clone().invert();
+  const p = sock.getWorldPosition(V3()).applyMatrix4(inv);
+  if (Math.abs(p.x) < 0.08) return null;
+  const want = new THREE.Vector3(-p.x, p.y, p.z), rs = sock.userData.rs;
+  let best = null, bd = 0.25;
+  for (const i of insts) for (const s of i.sockets) {
+    if (s === sock || s.userData.rs.shape !== rs.shape || s.userData.rs.size !== rs.size) continue;
+    const d = s.getWorldPosition(V3()).applyMatrix4(inv).distanceTo(want);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
+// --- 付け替えの編集 ---
+let ring = null;
+function showRing(sock) {   // つく場所：口と同じ形の、光る輪（ほかのパーツに隠れても見える）
+  hideRing();
+  const rs = sock.userData.rs;
+  const seg = rs.shape === "CIRCLE" ? 48 : rs.shape === "SQUARE" ? 4 : 6;
+  const r = rs.shape === "SQUARE" ? SIZES[rs.size] / 2 * Math.SQRT2 : SIZES[rs.size] / 2;
+  ring = new THREE.Mesh(new THREE.RingGeometry(r * 1.18, r * 1.42, seg, 1, rs.shape === "SQUARE" ? Math.PI / 4 : 0),
+    new THREE.MeshBasicMaterial({ color: SHAPE_COLOR[rs.shape], side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthTest: false }));
+  ring.renderOrder = 10; ring.userData.isMark = true;
+  sock.add(ring); ring.position.copy(rs.mark.position); ring.quaternion.copy(rs.mark.quaternion);
+}
+function hideRing() { if (ring) { ring.parent && ring.parent.remove(ring); ring = null; } }
+function beginEdit(slot) {
+  if (swapAnim) return;
+  if (trayOpen) closeLook();
+  stopAutoMove();
+  const snap = serializeBuild();
+  const mirror = mirrorOf(slot.target);
+  edit = { kind: slot.kind, snap, path: pathOf(slot.target), mpath: mirror ? pathOf(mirror) : null, choice: null, cur: setIdOf(slot), changed: false };
+  const info = KIND_INFO[slot.kind], rs = slot.target.userData.rs;
+  document.getElementById("editTitle").textContent = `${info.title}を替える`;
+  document.getElementById("editSub").innerHTML = `${info.where ? info.where + "の " : ""}<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span> の口（光っている輪）につながるものだけを出しています`;
+  document.getElementById("editSymWrap").hidden = !mirror;
+  document.getElementById("rotNote").textContent = rs.shape === "CIRCLE" ? "丸い口なので15度ずつ回せます" : rs.shape === "SQUARE" ? "四角い口なので90度ずつ" : "六角の口なので60度ずつ";
+  document.getElementById("editResult").textContent = "";
+  const box = document.getElementById("editCards"); box.innerHTML = "";
+  for (const c of candidatesFor(slot)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "swapCard" + (c.id === edit.cur ? " now" : "");
+    b.dataset.id = c.id;
+    b.innerHTML = `<img alt="" src="${c.thumb || ""}"><b>${c.label}</b>${c.note ? `<span>${c.note}</span>` : ""}${c.id === edit.cur ? "<i>今</i>" : ""}`;
+    b.addEventListener("click", () => choose(c));
+    box.appendChild(b);
+  }
+  document.getElementById("editPanel").hidden = false;
+  document.body.classList.add("trayOpen", "editing");
+  swapHov = null; swapSel = null; setOutline();
+  edit.sock = slot.target; showRing(slot.target);
+  updateEditButtons();
+  requestAnimationFrame(() => focusOn(slot.target));
+}
+function editRootAt(sock) { const p = sock && sock.userData.rs.partner; return p ? p.userData.rs.inst : null; }
+function choose(c, force) {
+  if (!edit || swapAnim) return;
+  if (!force && edit.choice && edit.choice.id === c.id) return;
+  // いったん元のロボットに戻してから、選んだものに替える（何度選び直しても崩れない）
+  loadBuild(edit.snap);
+  const sock = resolvePath(edit.path); if (!sock) return;
+  const sides = [sock];
+  const sym = !document.getElementById("editSym").closest("label").hidden && document.getElementById("editSym").checked;
+  if (sym && edit.mpath) { const m = resolvePath(edit.mpath); if (m) sides.push(m); }
+  const fresh = [];
+  if (c.id !== edit.cur) {
+    for (const s of sides) {
+      const old = editRootAt(s);
+      const kids = [];   // 外すパーツの先に付いていたもの（肩なら腕）は、新しいパーツへ付け直す
+      if (old && edit.kind !== "legs" && edit.kind !== "arm") for (const x of old.sockets) { const k = editRootAt(x); if (k && k !== old && x !== old.own) { x.userData.rs.partner = null; k.own.userData.rs.partner = null; scene.attach(k.root); k.target = null; kids.push(k); } }
+      if (old) removeInst(old);
+      const inst = attachSet(s, c);
+      if (inst) {
+        fresh.push(inst);
+        for (const k of kids) { const t = inst.sockets.find(x => !x.userData.rs.partner && x.userData.rs.shape === k.own.userData.rs.shape && x.userData.rs.size === k.own.userData.rs.size); if (!t || !relink(k, t)) removeInst(k); }
+        inst.root.userData.s1 = inst.root.scale.clone(); inst.root.scale.setScalar(0.001);
+      }
+    }
+  }
+  edit.choice = c; edit.changed = c.id !== edit.cur; edit.rot = 0;
+  edit.sock = sock; showRing(sock);
+  phys = null;
+  if (fresh.length) swapAnim = { t: 0, fresh };
+  document.querySelectorAll("#editCards .swapCard").forEach(b => b.classList.toggle("sel", b.dataset.id === c.id));
+  swapSel = sides.map(editRootAt).filter(Boolean).flatMap(r => [...subtreeInsts(r)]); setOutline();
+  document.getElementById("editResult").textContent = edit.changed ? `${c.label}をつけて見ています。回してから「確定」を押すと反映されます` : "今のパーツです";
+  updateEditButtons();
+}
+function rotateEdit(dir) {
+  if (!edit) return;
+  const sock = resolvePath(edit.path), r = editRootAt(sock); if (!r || !r.own) return;
+  const before = r.roll;
+  twistBy(r, dir);
+  if (Math.abs(r.roll - before) < 1e-6) { document.getElementById("editResult").textContent = `${r.label}は、これ以上は回りません（壊れない範囲で止めています）`; return; }
+  const sym = !document.getElementById("editSymWrap").hidden && document.getElementById("editSym").checked;
+  if (sym && edit.mpath) { const m = editRootAt(resolvePath(edit.mpath)); if (m && m.own) twistBy(m, -dir); }
+  edit.changed = true; edit.rot += dir;
+  document.getElementById("editResult").textContent = `${r.label}を回しました。「確定」で反映されます`;
+  updateEditButtons();
+}
+function updateEditButtons() {
+  const sock = edit && resolvePath(edit.path), r = editRootAt(sock);
+  document.getElementById("rotL").disabled = document.getElementById("rotR").disabled = !(r && r.own);
+  document.getElementById("editOk").disabled = !(edit && edit.changed);
+}
+function endEdit() {
+  edit = null; hideRing();
+  document.getElementById("editPanel").hidden = true;
+  document.body.classList.remove("trayOpen", "editing");
+  swapSel = null; setOutline();
+  phys = null; startAutoMove();
   frameSwap();
 }
-// カメラ：ロボット全体が、トレイに隠れない上の空きに大きく収まるように寄せる（なめらかに）
+function cancelEdit() { if (!edit) return; if (edit.changed) loadBuild(edit.snap); endEdit(); }
+function confirmEdit() {
+  if (!edit || !edit.changed) return;
+  const kind = edit.kind, label = edit.choice ? edit.choice.label : "";
+  commit();
+  endEdit();
+  setTimeout(() => {   // 新しい形での歩き方を見せる
+    const g = autoMove && autoMove.gp;
+    const msg = kind === "legs" && g ? `${label}：脚の長さ ${g.L.toFixed(2)}m → 歩幅 ${g.lam.toFixed(2)}m・1歩 ${(g.T / 2).toFixed(2)}秒。歩き方は脚の長さから式で決めています`
+      : kind === "legs" ? `${label}：車輪なので、歩かずに回して進みます` : `${label || "向き"}を反映しました。動き方はそのまま付いてきます`;
+    toast(msg);
+  }, 80);
+}
+let toastTimer = 0;
+function toast(msg) {
+  let t = document.getElementById("swapToast");
+  if (!t) { t = document.createElement("div"); t.id = "swapToast"; t.className = "swapToast"; t.setAttribute("aria-live", "polite"); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 6500);
+}
+
+// --- カメラ ---
 let camTween = null;
-function frameSwap() {
+function tweenCam(target, pos, sec = 0.5) { camTween = { t: 0, d: sec, ft: controls.target.clone(), fp: camera.position.clone(), tt: target, tp: pos }; }
+function frameSwap() {   // ロボット全体を、下のパネルに隠れない上の空きに大きく
+  if (edit) return;
   buildGroup.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(buildGroup); if (box.isEmpty()) return;
   const H = renderer.domElement.clientHeight;
   const tray = document.getElementById("swapTray");
-  const cover = trayOpen && tray ? H - tray.getBoundingClientRect().top + 12 : (innerWidth <= 760 ? 84 : 70);   // 下から隠れる高さ（px）。閉じているときはボタンのぶん
-  const top = innerWidth <= 760 ? 96 : 76;                                           // 上の見出しのぶん
+  const cover = trayOpen && tray ? H - tray.getBoundingClientRect().top + 12 : (innerWidth <= 760 ? 84 : 70);
+  const top = innerWidth <= 760 ? 96 : 76;
   const freeFrac = Math.max(0.4, (H - cover - top) / H);
-  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(V3()), c = box.getCenter(V3());
   const half = THREE.MathUtils.degToRad(camera.fov / 2);
-  const need = Math.max(size.y, size.x / camera.aspect * 1.1) * 1.06;
+  const need = Math.max(size.y, size.x / camera.aspect * 1.1) * 1.08;
   const dist = Math.max(3.5, need / 2 / Math.tan(half) / freeFrac);
-  const viewH = 2 * dist * Math.tan(half);
-  const shift = viewH * ((cover - top) / 2) / H;   // 空きの真ん中に来るよう、注目点をずらす
-  const dir = new THREE.Vector3(0.42, 0.18, 1).normalize();   // 斜め前の少し上から
+  const shift = 2 * dist * Math.tan(half) * ((cover - top) / 2) / H;
+  const dir = new THREE.Vector3(0.42, 0.18, 1).normalize();
   const target = c.clone(); target.y -= shift;
-  camTween = { t: 0, ft: controls.target.clone(), fp: camera.position.clone(), tt: target, tp: target.clone().addScaledVector(dir, dist) };
+  tweenCam(target, target.clone().addScaledVector(dir, dist));
 }
+function focusOn(sock) {   // つく場所へ寄る。つけたパーツが入る大きさで、口の外側の斜め前から
+  buildGroup.updateMatrixWorld(true);
+  const p = sock.getWorldPosition(V3());
+  const r = editRootAt(sock);
+  const box = r ? new THREE.Box3().setFromObject(r.root) : new THREE.Box3().setFromCenterAndSize(p, new THREE.Vector3(0.8, 0.8, 0.8));
+  box.expandByPoint(p);
+  const c = box.getCenter(V3()), rad = Math.max(0.6, box.getSize(V3()).length() / 2);
+  const core = insts.find(i => !i.target).root.getWorldPosition(V3());
+  const out = p.clone().sub(core); out.y *= 0.4; if (out.lengthSq() < 1e-4) out.set(0, 0, 1); out.normalize();
+  const dir = out.multiplyScalar(0.8).add(new THREE.Vector3(0.25, 0.35, 1).normalize()).normalize();
+  const H = renderer.domElement.clientHeight, panel = document.getElementById("editPanel");
+  const cover = H - panel.getBoundingClientRect().top + 12, top = innerWidth <= 760 ? 96 : 76;
+  const freeFrac = Math.max(0.35, (H - cover - top) / H);
+  const half = THREE.MathUtils.degToRad(camera.fov / 2);
+  const dist = Math.max(2.4, rad * 1.5 / Math.tan(half) / freeFrac);
+  const shift = 2 * dist * Math.tan(half) * ((cover - top) / 2) / H;
+  const target = c.clone(); target.y -= shift;
+  tweenCam(target, target.clone().addScaledVector(dir, dist), 0.6);
+}
+const _follow = new THREE.Vector3(); let followInit = false;
 function updateCam(dt) {
+  // 歩いているあいだは、ロボットが進んだぶんだけカメラも進める
+  const p = buildGroup.position;
+  if (!followInit) { _follow.copy(p); followInit = true; }
+  const d = p.clone().sub(_follow); _follow.copy(p);
+  if (!edit && d.lengthSq() > 0 && d.lengthSq() < 4) {
+    controls.target.add(d); camera.position.add(d);
+    if (camTween) { camTween.ft.add(d); camTween.fp.add(d); camTween.tt.add(d); camTween.tp.add(d); }
+  }
+  if (stageFloor) { stageFloor.position.x = Math.round(p.x); stageFloor.position.z = Math.round(p.z); }   // 床はロボットの下に（目はずれない）
   if (!camTween) return;
-  camTween.t = Math.min(1, camTween.t + dt / 0.5);
+  camTween.t = Math.min(1, camTween.t + dt / camTween.d);
   const k = 1 - Math.pow(1 - camTween.t, 3);
   controls.target.lerpVectors(camTween.ft, camTween.tt, k);
   camera.position.lerpVectors(camTween.fp, camTween.tp, k);
   if (camTween.t >= 1) camTween = null;
 }
 const backOut = k => { const s = 1.9; k -= 1; return k * k * ((s + 1) * k + s) + 1; };
-function doSwap(set) {
-  if (swapAnim) return;
-  const cur = currentLegSet();
-  if (cur && cur.id === set.id) return;
-  const old = hipInst(); if (!old) return;
-  const target = old.target;
-  stopAutoMove();
-  old.target.userData.rs.partner = null; old.own.userData.rs.partner = null;
-  scene.attach(old.root); old.target = null; setGhost(old, true);
-  const fresh = attachLegSet(target, set);
-  if (!fresh) return;
-  fresh.root.userData.s1 = fresh.root.scale.clone(); fresh.root.scale.setScalar(0.001);
-  phys = null;
-  swapAnim = { t: 0, old, fresh, set, landed: false };
-  swapSel = [...legTree()]; setOutline();
-  document.querySelectorAll(".swapCard").forEach(c => c.classList.toggle("now", c.dataset.set === set.id));
-  document.getElementById("swapResult").textContent = "";
-}
 function updateSwap(dt) {
   updateCam(dt);
+  if (ring) ring.material.opacity = 0.55 + 0.4 * Math.sin(performance.now() / 180);
   const a = swapAnim; if (!a) return;
   a.t += dt;
-  a.old.root.position.y -= dt * (1.5 + a.t * 14); a.old.root.rotateX(dt * 2.2);
-  const k = Math.min(1, a.t / 0.3), e = Math.max(0.001, backOut(k));
-  a.fresh.root.scale.copy(a.fresh.root.userData.s1).multiplyScalar(e);
-  if (!a.landed && k >= 1) {
-    a.landed = true;
-    a.fresh.root.scale.copy(a.fresh.root.userData.s1);
-    startAutoMove();
-    buildGroup.updateMatrixWorld(true);
-    const b = new THREE.Box3().setFromObject(a.fresh.root), c = b.getCenter(new THREE.Vector3());
-    fxRing(new THREE.Vector3(c.x, b.min.y + 0.05, c.z), 0.9, 0xf3e2c0, 0.5);
-    fxDust(new THREE.Vector3(c.x, b.min.y + 0.05, c.z), 12, 0.8, 0.4);
-    fxShake(0.04, 0.18);
-    const g = autoMove && autoMove.gp;
-    document.getElementById("swapResult").innerHTML = g
-      ? `<b>${a.set.label}</b>：脚の長さ ${g.L.toFixed(2)}m → 歩幅 ${g.lam.toFixed(2)}m・1歩 ${(g.T / 2).toFixed(2)}秒。歩き方は脚の長さから式で決めています`
-      : `<b>${a.set.label}</b>：車輪なので、歩かずに回して進みます`;
+  const k = Math.min(1, a.t / 0.28), e = Math.max(0.001, backOut(k));
+  for (const f of a.fresh) f.root.scale.copy(f.root.userData.s1).multiplyScalar(e);
+  if (k >= 1) {
+    for (const f of a.fresh) {
+      f.root.scale.copy(f.root.userData.s1);
+      const s = f.target; if (!s) continue;
+      fxRing(s.getWorldPosition(V3()), 0.5, 0xf3e2c0, 0.4);
+    }
+    swapAnim = null;
   }
-  if (a.t > 0.7) { removeInst(a.old); swapAnim = null; if (trayOpen === "legs") { swapSel = [...legTree()]; setOutline(); } setTimeout(frameSwap, 250); }
 }
-// 押す・乗せる
+// --- 押す・乗せる ---
 let swapDown = null;
 view.addEventListener("pointerdown", e => { if (swapMode && e.button === 0) swapDown = [e.clientX, e.clientY]; });
 addEventListener("pointerup", e => {
   if (!swapMode || !swapDown) return;
   const d = Math.hypot(e.clientX - swapDown[0], e.clientY - swapDown[1]); swapDown = null;
   if (d > 6 || !overCanvas(e)) return;
+  if (edit) return;   // 編集中は、パネルのボタンで決める
   const inst = pickPart(e);
-  if (!inst) { if (trayOpen) closeTray(); return; }
-  openTray(legTree().has(inst) ? "legs" : "look");
+  if (!inst) { if (trayOpen) closeLook(); return; }
+  const slot = slotOf(inst);
+  if (slot) beginEdit(slot); else openLook();
 });
 addEventListener("pointermove", e => {
-  if (!swapMode || e.buttons || e.pointerType !== "mouse" || trayOpen) return;
+  if (!swapMode || e.buttons || e.pointerType !== "mouse" || trayOpen || edit) return;
   const inst = overCanvas(e) ? pickPart(e) : null;
-  const legs = inst && legTree().has(inst);
-  const next = inst ? (legs ? [...legTree()] : insts.filter(i => !legTree().has(i))) : null;
-  const key = next ? (legs ? "L" : "B") : "";
+  const slot = inst ? slotOf(inst) : null;
+  const next = slot ? [...subtreeInsts(slot.root)] : null;
+  const key = slot ? slot.kind + ":" + slot.root.key : "";
   if (key !== (swapHov ? swapHov.key : "")) { swapHov = next; if (swapHov) swapHov.key = key; setOutline(); }
   renderer.domElement.style.cursor = inst ? "pointer" : "";
-  document.getElementById("swapHints").dataset.hot = key;
 });
-addEventListener("keydown", e => { if (swapMode && e.key === "Escape" && trayOpen) closeTray(); });
+addEventListener("keydown", e => {
+  if (!swapMode) return;
+  if (e.key === "Escape") { if (edit) cancelEdit(); else if (trayOpen) closeLook(); }
+  if (edit && e.key === "Enter") confirmEdit();
+  if (edit && (e.key === "r" || e.key === "R")) rotateEdit(e.shiftKey ? -1 : 1);
+});
 
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
