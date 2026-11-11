@@ -1284,7 +1284,7 @@ function startMove(name) {
 }
 function updateMove(dt) {
   if (!move) return;
-  moveT += dt;
+  moveT += dt * (swapMode && move === ROBOT_MOVES.dig ? 0.45 : 1);   // 付け替えの画面では、押しやすいようにゆっくり掘る
   const span = Math.max(...move.tracks.map(t => t[3][t[3].length - 1][0])) - 1;
   let f = 1 + moveT * 30;
   if (move.loop) f = 1 + ((f - 1) % span);
@@ -3069,16 +3069,17 @@ const ARM_SETS = [   // 肩の先の 六角M の口
 // はじめのロボット：用途（体のつくり）が違うものだけを並べる。ゴーレム・番人は人型の見た目違いなので、プリセットにはせず付け替えで出す（本人 11/11）
 // ai：見た目に AI 生成のパーツを使っているか（審査対象外の申告のため表示する）
 const PRESETS = [
-  { id: "mini", label: "基本", note: "コア1つ・いちばん小さい", ai: 0, theme: "WHITE" },
-  { id: "human", label: "人型", note: "二本足で歩く", ai: 0, theme: "WHITE" },
-  { id: "wheel", label: "車輪型", note: "車輪で走る", ai: 0, theme: "WHITE" },
+  { id: "human", label: "人型（基本）", note: "二本足で歩く。まずはここから", ai: 0, theme: "WHITE" },
+  { id: "wheel", label: "車輪型", note: "脚を車輪にして走る", ai: 0, theme: "WHITE" },
+  { id: "mining", label: "採掘", note: "キャタピラで進み、アームの先の道具で掘る", ai: 0, theme: "WHITE" },
   { id: "quad", label: "四つ足", note: "胴をつないで脚を増やす（脚はAI生成）", ai: 1, theme: "WHITE" },
+  { id: "six", label: "六本脚", note: "胴を3つつないで脚6本（脚はAI生成）", ai: 1, theme: "WHITE" },
   { id: "random", label: "ランダム", note: "脚・腕・頭・見た目を選ぶ（AI生成も含む）", ai: 1, random: true },
 ];
 let preset = "human";
 const KIND_INFO = {
   legs: { title: "脚（腰ごと）", where: "胴の下" }, arm: { title: "腕", where: "肩の先" }, shoulder: { title: "肩", where: "胴の横" },
-  head: { title: "頭", where: "胴の上" }, part: { title: "パーツ", where: "" },
+  head: { title: "頭", where: "胴の上" }, part: { title: "パーツ", where: "" }, tool: { title: "道具", where: "アームの先" },
 };
 const setKeys = set => set.hip ? [set.hip, ...set.leg] : set.chain;
 const setReady = set => setKeys(set).every(k => templates[k]);
@@ -3192,7 +3193,7 @@ function initSwap() {
     </div><p class="swapResult" id="editResult" aria-live="polite"></p>`;
   document.body.appendChild(ed);
   const hint = document.createElement("div"); hint.className = "swapHints"; hint.id = "swapHints";
-  hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・肩・頭）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>` +
+  hint.innerHTML = `<span class="hintText">替えたい所（脚・腕・頭・道具）を押す</span><button type="button" class="hintBtn" id="hintLook">見た目を替える</button>` +
     `<button type="button" class="hintBtn ghost" id="hintReset" hidden>最初の形に戻す</button><button type="button" class="hintBtn ghost" id="hintPreset">ロボットを選ぶ</button>`;
   document.body.appendChild(hint);
   document.getElementById("hintLook").addEventListener("click", openLook);
@@ -3334,13 +3335,17 @@ function closeLook() {
 // --- 替える場所（接続口）を、押したパーツから決める ---
 function hipOf(inst) { for (let x = inst; x; x = x.target && x.target.userData.rs.inst) if (/Hip$/.test(x.key) && x.target) return x; return null; }
 function slotOf(inst) {
+  // アームの先の道具：アーム（つなぎ）を押しても、先の道具を替える
+  if (/^Link_/.test(inst.key)) { const t = [...subtreeInsts(inst)].find(i => i.key in TOOLS); if (t) inst = t; }
+  if (inst.key in TOOLS && inst.target) return { kind: "tool", target: inst.target, root: inst };
+  if (inst.target && catOf(inst.key) === "move" && !hipOf(inst)) return { kind: "move", target: inst.target, root: inst };
   const h = hipOf(inst);
   if (h) return { kind: "legs", target: h.target, root: h };
   let cur = inst;
   while (cur.target) { const p = cur.target.userData.rs.inst; if (!p.target || /Shoulder/.test(p.key)) break; cur = p; }
   if (!cur.target) return null;   // コア（胴）は替えない → 見た目
   const parent = cur.target.userData.rs.inst;
-  const kind = /Shoulder/.test(parent.key) ? "arm" : /Shoulder/.test(cur.key) ? "shoulder" : /Head/.test(cur.key) ? "head" : "part";
+  const kind = /Shoulder/.test(parent.key) ? "arm" : /Shoulder/.test(cur.key) ? "shoulder" : (/Head/.test(cur.key) || catOf(cur.key) === "head") ? "head" : "part";
   return { kind, target: cur.target, root: cur };
 }
 function candidatesFor(slot) {
@@ -3348,10 +3353,15 @@ function candidatesFor(slot) {
   const want = slot.target.userData.rs;   // 今は埋まっている口なので、形と大きさだけで合うものを選ぶ
   const fits = k => templates[k].probe.some(x => x.userData.rs.shape === want.shape && x.userData.rs.size === want.size);
   if (slot.kind === "arm") return ARM_SETS.filter(setReady).filter(s => fits(s.chain[0]));
+  const one = k => ({ id: k, label: templates[k].label, note: "", chain: [k], thumb: templates[k].thumb });
+  if (slot.kind === "tool") return Object.keys(TOOLS).filter(k => templates[k] && fits(k)).map(one);
+  // 先に付いているもの（上部ユニットのアームなど）を、付け直せるパーツだけ出す
+  const kids = slot.root.sockets.filter(x => x !== slot.root.own && editRootAt(x)).map(x => x.userData.rs);
+  const keepsKids = k => kids.every(w => templates[k].probe.filter(x => x.userData.rs.shape === w.shape && x.userData.rs.size === w.size).length >= 1 + (w.shape === want.shape && w.size === want.size ? 1 : 0));
   // 1つのパーツ：つなげるものを全部（旧い版は出さない）
   return Object.keys(templates).filter(k => !isOld(k) && templates[k].kind !== "core" && catOf(k) !== "move" && fits(k))
     .filter(k => slot.kind !== "head" || catOf(k) === "head").filter(k => slot.kind !== "shoulder" || /Shoulder/.test(k))
-    .map(k => ({ id: k, label: templates[k].label, note: "", chain: [k], thumb: templates[k].thumb }));
+    .filter(keepsKids).map(one);
 }
 function setIdOf(slot) {
   if (slot.kind === "legs") {
@@ -3408,12 +3418,12 @@ function hideRing() { if (ring) { ring.parent && ring.parent.remove(ring); ring 
 function beginEdit(slot) {
   if (swapAnim) return;
   if (trayOpen) closeLook();
-  stopAutoMove();
+  stopAutoMove(); startMove(null); armReady();
   const snap = serializeBuild();
   const mirror = mirrorOf(slot.target);
   edit = { kind: slot.kind, snap, path: pathOf(slot.target), mpath: mirror ? pathOf(mirror) : null, choice: null, cur: setIdOf(slot), changed: false };
   const info = KIND_INFO[slot.kind], rs = slot.target.userData.rs;
-  document.getElementById("editTitle").textContent = `${info.title}を替える`;
+  document.getElementById("editTitle").textContent = `${slot.kind === "part" ? slot.root.label : info.title}を替える`;
   document.getElementById("editSub").innerHTML = `${info.where ? info.where + "の " : ""}<span class="sockettag" style="background:${SHAPE_CSS[rs.shape]}">${SHAPE_LABEL[rs.shape]}${rs.size}</span> の口（光っている輪）につながるものだけを出しています`;
   document.getElementById("editSymWrap").hidden = !mirror;
   document.getElementById("rotNote").textContent = rs.shape === "CIRCLE" ? "丸い口なので15度ずつ回せます" : rs.shape === "SQUARE" ? "四角い口なので90度ずつ" : "六角の口なので60度ずつ";
@@ -3454,7 +3464,7 @@ function choose(c, force) {
   if (!edit || swapAnim) return;
   if (!force && edit.choice && edit.choice.id === c.id) return;
   // いったん元のロボットに戻してから、選んだものに替える（何度選び直しても崩れない）
-  loadBuild(edit.snap);
+  loadBuild(edit.snap); armReady();
   const sock = resolvePath(edit.path); if (!sock) return;
   const sides = [sock];
   const sym = !document.getElementById("editSym").closest("label").hidden && document.getElementById("editSym").checked;
@@ -3508,8 +3518,20 @@ function endEdit() {
   document.getElementById("editPanel").hidden = true;
   document.body.classList.remove("trayOpen", "editing");
   swapSel = null; setOutline();
-  phys = null; startAutoMove();
+  phys = null; swapMotion();
   frameSwap();
+}
+// 採掘のアーム：構えた姿勢（Blender の Mining_Ready の終わりと同じ角度）。付け替え中はこの姿勢で止める
+function armReady() {
+  const bj = jointOf("Link_L", "Boom"), stk = jointOf("Link_M", "Stick");
+  if (bj) bj.rotation.x = THREE.MathUtils.degToRad(62);
+  if (stk) stk.rotation.x = THREE.MathUtils.degToRad(-84);
+  return !!bj;
+}
+// 付け替えの画面での動き：アームがあれば掘る動作をくり返し（キャタピラも回す）、なければ歩く・走る
+function swapMotion() {
+  if (jointOf("Link_L", "Boom") && insts.some(i => i.key in TOOLS)) { stopAutoMove(); startMove("dig"); setRun(true); return; }
+  startMove(null); startAutoMove();
 }
 function cancelEdit() { if (!edit) return; if (edit.changed) { loadBuild(edit.snap); refreshMarks(); } endEdit(); }
 function confirmEdit() {
@@ -3569,23 +3591,29 @@ function frameSwap() {   // ロボット全体を、下のパネルに隠れな�
   const freeFrac = Math.max(0.4, (H - cover - top) / H);
   const size = box.getSize(V3()), c = box.getCenter(V3());
   const half = THREE.MathUtils.degToRad(camera.fov / 2);
-  const need = Math.max(size.y, size.x / camera.aspect * 1.1) * 1.08;
+  const need = Math.max(size.y, Math.max(size.x, size.z * 0.9) / camera.aspect * 1.1) * 1.08;   // 胴の長いロボ（六本脚など）は奥行きも斜めから見える
   const dist = Math.max(3.5, need / 2 / Math.tan(half) / freeFrac);
   const shift = 2 * dist * Math.tan(half) * ((cover - top) / 2) / H;
   const dir = new THREE.Vector3(0.42, 0.18, 1).normalize();
   const target = c.clone(); target.y -= shift;
   tweenCam(target, target.clone().addScaledVector(dir, dist));
 }
+function meshBox(root) {   // 印（口の目印）を除いた、見えている形だけの箱
+  const box = new THREE.Box3(), b = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverse(o => { if (o.isMesh && !o.userData.isMark && o.visible) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); box.union(b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld)); } });
+  return box;
+}
 function focusOn(sock) {   // つく場所へ寄る。つけたパーツが入る大きさで、口の外側の斜め前から
   buildGroup.updateMatrixWorld(true);
   const p = sock.getWorldPosition(V3());
   const r = editRootAt(sock);
-  const box = r ? new THREE.Box3().setFromObject(r.root) : new THREE.Box3().setFromCenterAndSize(p, new THREE.Vector3(0.8, 0.8, 0.8));
+  const box = r ? meshBox(r.root) : new THREE.Box3().setFromCenterAndSize(p, new THREE.Vector3(0.8, 0.8, 0.8));
   box.expandByPoint(p);
   const symOn = edit && edit.mpath && !document.getElementById("editSymWrap").hidden && document.getElementById("editSym").checked;
   const ms = symOn ? resolvePath(edit.mpath) : null, mr = ms && editRootAt(ms);
-  if (mr) { box.union(new THREE.Box3().setFromObject(mr.root)); box.expandByPoint(ms.getWorldPosition(V3())); }
-  const c = box.getCenter(V3()), rad = Math.max(0.6, box.getSize(V3()).length() / 2);
+  if (mr) { box.union(meshBox(mr.root)); box.expandByPoint(ms.getWorldPosition(V3())); }
+  const c = box.getCenter(V3()), rad = Math.max(0.35, box.getSize(V3()).length() / 2);   // 小さい道具にも寄れるよう、下限は小さめ
   const coreObj = insts.find(i => !i.target).root, core = coreObj.getWorldPosition(V3());
   const q = coreObj.getWorldQuaternion(new THREE.Quaternion());
   const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q); front.y = 0; front.normalize();
@@ -3597,7 +3625,7 @@ function focusOn(sock) {   // つく場所へ寄る。つけたパーツが入�
   const cover = H - panel.getBoundingClientRect().top + 12, top = innerWidth <= 760 ? 96 : 76;
   const freeFrac = Math.max(0.35, (H - cover - top) / H);
   const half = THREE.MathUtils.degToRad(camera.fov / 2);
-  const dist = Math.max(2.4, rad * 1.5 / Math.tan(half) / freeFrac);
+  const dist = Math.max(1.8, rad * 1.05 / Math.tan(half) / freeFrac);
   const shift = 2 * dist * Math.tan(half) * ((cover - top) / 2) / H;
   const target = c.clone(); target.y -= shift;
   tweenCam(target, target.clone().addScaledVector(dir, dist), 0.6);
@@ -3634,7 +3662,7 @@ function updateSwap(dt) {
       f.root.scale.copy(f.root.userData.s1).multiplyScalar(Math.max(0.001, backOut(k)));
       if (k >= 1 && !f.root.userData.popped) { f.root.userData.popped = true; if (f.target) fxRing(f.target.getWorldPosition(V3()), 0.35, 0xf3e2c0, 0.3); }
     }
-    if (done) { swapAnim = null; phys = null; startAutoMove(); }
+    if (done) { swapAnim = null; phys = null; if (edit && armReady()) { /* 付け替え中のアームは構えたまま */ } else swapMotion(); }
     return;
   }
   const k = Math.min(1, a.t / 0.28), e = Math.max(0.001, backOut(k));
@@ -3661,6 +3689,7 @@ addEventListener("pointerup", e => {
   const inst = pickPart(e);
   if (!inst) { if (trayOpen) closeLook(); return; }
   const slot = slotOf(inst);
+  if (slot && slot.kind === "move") { toast(`${slot.root.label}は、今は1種類だけです。ほかの所を押すと替えられます`); return; }
   if (slot) beginEdit(slot); else openLook();
 });
 addEventListener("pointermove", e => {
