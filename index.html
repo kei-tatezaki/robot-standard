@@ -154,10 +154,11 @@
     color: var(--ink); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
   .swapToast.on { opacity: 1; transform: translate(-50%, 0); }
   body.editing .moreLinks { display: none; }
-  .swapCards.presets { grid-template-columns: repeat(5, 1fr); }
+  .swapCards.presets { grid-template-columns: repeat(6, 1fr); }
+  #presetTray { width: min(780px, calc(100vw - 24px)); }
   .swapCards.presets img { height: 96px; }
   .swapCard span.ai { color: var(--warn); }
-  .randomArt { display: grid; place-items: center; height: 96px; border-radius: 7px; background: #2a2e33; font-size: 40px; font-weight: 700; color: var(--muted); }
+  .swapCard .randomArt { display: grid; place-items: center; height: 96px; border-radius: 7px; background: #2a2e33; font-size: 40px; font-weight: 700; color: var(--muted); }
   .swapResult { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 1.5em; line-height: 1.5; }
   .swapResult b { color: var(--ink); }
   @media (prefers-reduced-motion: reduce) { .swapTray { animation: none; } }
@@ -177,7 +178,7 @@
     .editPanel .swapCards { grid-template-columns: repeat(4, 1fr); max-height: 30vh; }
     .swapCards.presets { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
     .swapCards.presets .swapCard { flex: 0 0 30%; scroll-snap-align: start; }
-    .swapCards.presets img, .randomArt { height: 70px; }
+    .swapCards.presets img, .swapCard .randomArt { height: 70px; }
     .hintText { font-size: 12px; padding: 9px 4px; }
     .swapToast { bottom: auto; top: 92px; font-size: 12px; }
     .rotNote { display: none; }
